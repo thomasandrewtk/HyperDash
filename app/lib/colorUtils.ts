@@ -145,13 +145,10 @@ export function calculateReactiveColors(brightness: number): ColorPalette {
   Object.keys(palette).forEach((key) => {
     const colorKey = key as keyof ColorPalette;
     const rgbColor = palette[colorKey];
-    const rgb = parseRGB(rgbColor);
     
-    if (rgb) {
-      // Adjust brightness while maintaining hue
-      palette[colorKey] = adjustBrightness(rgb.r, rgb.g, rgb.b, adjustmentFactor);
-    } else if (rgbColor.includes('rgba')) {
-      // Handle rgba colors (placeholder)
+    // Check for rgba format first (before parsing)
+    if (rgbColor.includes('rgba')) {
+      // Handle rgba colors (placeholder) - preserve alpha channel
       const match = rgbColor.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/);
       if (match) {
         const r = parseInt(match[1], 10);
@@ -164,6 +161,13 @@ export function calculateReactiveColors(brightness: number): ColorPalette {
         if (rgbMatch) {
           palette[colorKey] = `rgba(${rgbMatch[1]}, ${rgbMatch[2]}, ${rgbMatch[3]}, ${a})`;
         }
+      }
+    } else {
+      // Handle rgb colors
+      const rgb = parseRGB(rgbColor);
+      if (rgb) {
+        // Adjust brightness while maintaining hue
+        palette[colorKey] = adjustBrightness(rgb.r, rgb.g, rgb.b, adjustmentFactor);
       }
     }
   });

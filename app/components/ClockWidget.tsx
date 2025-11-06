@@ -26,6 +26,15 @@ export default function ClockWidget() {
   const [pomodoroCount, setPomodoroCount] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const originalTitleRef = useRef<string>('HyperDash');
+
+  // Store original page title
+  useEffect(() => {
+    originalTitleRef.current = document.title;
+    return () => {
+      document.title = originalTitleRef.current;
+    };
+  }, []);
 
   // Load saved pomodoro state from localStorage
   useEffect(() => {
@@ -48,6 +57,40 @@ export default function ClockWidget() {
       setPomodoroCount(parsed);
     }
     // Don't restore running state - start paused on page load
+  }, []);
+
+  // Request notification permission
+  const requestNotificationPermission = useCallback(async () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        await Notification.requestPermission();
+      }
+    }
+  }, []);
+
+  // Show browser notification
+  const showNotification = useCallback((mode: TimerMode) => {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      let title = '';
+      let body = '';
+      
+      if (mode === 'work') {
+        title = 'Work Session Complete!';
+        body = 'Time for a break.';
+      } else if (mode === 'shortBreak') {
+        title = 'Short Break Complete!';
+        body = 'Ready to get back to work?';
+      } else {
+        title = 'Long Break Complete!';
+        body = 'Time to start a new work session.';
+      }
+      
+      new Notification(title, {
+        body,
+        icon: '/icon.png',
+        badge: '/icon.png',
+      });
+    }
   }, []);
 
   const handleTimerComplete = useCallback(() => {
@@ -74,6 +117,9 @@ export default function ClockWidget() {
       }
     }
 
+    // Show browser notification
+    showNotification(mode);
+
     // Cycle to next mode
     setMode((currentMode) => {
       if (currentMode === 'work') {
@@ -94,7 +140,7 @@ export default function ClockWidget() {
         return 'work';
       }
     });
-  }, [pomodoroCount]);
+  }, [pomodoroCount, mode, showNotification]);
 
   // Listen for clock format changes
   useEffect(() => {
@@ -153,6 +199,25 @@ export default function ClockWidget() {
     }
   }, [timeLeft, isRunning, handleTimerComplete]);
 
+  // Update page title with timer when running
+  useEffect(() => {
+    if (isRunning && timeLeft > 0) {
+      const mins = Math.floor(timeLeft / 60);
+      const secs = timeLeft % 60;
+      const timeString = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+      const modeLabel = getModeLabel();
+      document.title = `[${timeString}] ${modeLabel} - HyperDash`;
+    } else {
+      document.title = originalTitleRef.current;
+    }
+
+    return () => {
+      if (!isRunning) {
+        document.title = originalTitleRef.current;
+      }
+    };
+  }, [isRunning, timeLeft, mode]);
+
   // Save state to localStorage
   useEffect(() => {
     saveToLocalStorage('pomodoroTimeLeft', timeLeft.toString());
@@ -161,7 +226,13 @@ export default function ClockWidget() {
   }, [timeLeft, mode, pomodoroCount]);
 
   const handleStartPause = () => {
-    setIsRunning(!isRunning);
+    const newRunningState = !isRunning;
+    setIsRunning(newRunningState);
+    
+    // Request notification permission when starting timer
+    if (newRunningState) {
+      requestNotificationPermission();
+    }
   };
 
   const handleReset = () => {
@@ -227,6 +298,7 @@ export default function ClockWidget() {
         return 'Long Break';
     }
   };
+
 
   return (
     <Widget title="Clock">
