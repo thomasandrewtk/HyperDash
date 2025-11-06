@@ -6,6 +6,7 @@ import { getFromLocalStorage, saveToLocalStorage } from '@/app/lib/utils';
 import { useReactiveColors } from './ColorContext';
 
 const STORAGE_KEY = 'hyperdash-todos';
+const SHOW_COMPLETED_KEY = 'hyperdash-show-completed';
 
 interface Todo {
   id: string;
@@ -20,6 +21,7 @@ export default function TodoWidget() {
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [showCompleted, setShowCompleted] = useState<boolean>(true);
   const { colors } = useReactiveColors();
 
   useEffect(() => {
@@ -30,6 +32,11 @@ export default function TodoWidget() {
       } catch (error) {
         console.error('Error parsing todos:', error);
       }
+    }
+    
+    const savedShowCompleted = getFromLocalStorage(SHOW_COMPLETED_KEY);
+    if (savedShowCompleted !== null) {
+      setShowCompleted(savedShowCompleted === 'true');
     }
   }, []);
 
@@ -60,6 +67,10 @@ export default function TodoWidget() {
 
   const removeTodo = (id: string) => {
     saveTodos(todos.filter(todo => todo.id !== id));
+  };
+
+  const clearAllCompleted = () => {
+    saveTodos(todos.filter(todo => !todo.completed));
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -207,6 +218,157 @@ export default function TodoWidget() {
     return newTodos;
   };
 
+  // Separate todos into active and completed
+  const displayTodos = getDisplayTodos();
+  const activeTodos = displayTodos.filter(todo => !todo.completed);
+  const completedTodos = displayTodos.filter(todo => todo.completed);
+
+  const toggleShowCompleted = () => {
+    const newValue = !showCompleted;
+    setShowCompleted(newValue);
+    saveToLocalStorage(SHOW_COMPLETED_KEY, newValue.toString());
+  };
+
+  // Render a single todo item
+  const renderTodoItem = (todo: Todo) => (
+    <div
+      key={todo.id}
+      draggable={editingId !== todo.id}
+      onDragStart={(e) => handleDragStart(e, todo.id)}
+      onDragOver={(e) => handleDragOver(e, todo.id)}
+      onDragLeave={handleDragLeave}
+      onDrop={(e) => handleDrop(e, todo.id)}
+      onDragEnd={handleDragEnd}
+      className={`
+        flex items-center gap-2
+        p-2
+        bg-black/10
+        border rounded-sm
+        transition-all duration-200
+        ${editingId === todo.id ? 'cursor-default' : 'cursor-move'}
+        ${draggedId === todo.id 
+          ? 'border-white/50 shadow-lg' 
+          : dragOverId === todo.id && draggedId 
+            ? 'border-white/40' 
+            : 'border-white/10 hover:border-white/30'
+        }
+      `}
+      style={{
+        boxShadow: draggedId === todo.id 
+          ? '0 4px 8px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(0, 0, 0, 0.2)' 
+          : 'inset 0 1px 1px rgba(0, 0, 0, 0.2)',
+      }}
+    >
+      {editingId !== todo.id && (
+        <div
+          data-drag-handle
+          className="
+            cursor-grab
+            active:cursor-grabbing
+            select-none
+            flex items-center
+            px-1
+          "
+          style={{ color: colors.secondary }}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            fill="currentColor"
+            className="opacity-60"
+          >
+            <circle cx="2" cy="2" r="1" />
+            <circle cx="6" cy="2" r="1" />
+            <circle cx="10" cy="2" r="1" />
+            <circle cx="2" cy="6" r="1" />
+            <circle cx="6" cy="6" r="1" />
+            <circle cx="10" cy="6" r="1" />
+            <circle cx="2" cy="10" r="1" />
+            <circle cx="6" cy="10" r="1" />
+            <circle cx="10" cy="10" r="1" />
+          </svg>
+        </div>
+      )}
+      <input
+        type="checkbox"
+        checked={todo.completed}
+        onChange={() => toggleTodo(todo.id)}
+        className="
+          w-4 h-4
+          cursor-pointer
+        "
+        style={{ accentColor: colors.secondary }}
+        onMouseDown={(e) => e.stopPropagation()}
+        disabled={editingId === todo.id}
+      />
+      {editingId === todo.id ? (
+        <input
+          type="text"
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onKeyDown={(e) => handleEditKeyDown(e, todo.id)}
+          onBlur={() => handleEditSave(todo.id)}
+          autoFocus
+          className="
+            flex-1
+            bg-black/10
+            border border-white/20
+            rounded-sm
+            px-2 py-1
+            font-mono
+            text-sm
+            focus:outline-none
+            focus:border-white/50
+            focus:ring-1 focus:ring-white/30
+            transition-all duration-200
+          "
+          style={{
+            color: colors.primary,
+            boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.3)',
+          }}
+          data-placeholder-color={colors.placeholder}
+          onMouseDown={(e) => e.stopPropagation()}
+        />
+      ) : (
+        <span
+          onDoubleClick={() => handleDoubleClick(todo.id, todo.text)}
+          className={`
+            flex-1
+            text-sm
+            cursor-text
+            select-text
+            ${todo.completed ? 'line-through' : ''}
+          `}
+          style={{ color: todo.completed ? colors.muted : colors.primary }}
+        >
+          {todo.text}
+        </span>
+      )}
+      {editingId !== todo.id && (
+        <button
+          onClick={() => removeTodo(todo.id)}
+          className="
+            text-xs
+            px-2 py-1
+            hover:bg-white/10
+            rounded
+            transition-colors
+          "
+          style={{ color: colors.secondary }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = colors.primary;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = colors.secondary;
+          }}
+        >
+          ×
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <Widget title="Todo List">
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -267,144 +429,75 @@ export default function TodoWidget() {
                 Your tasks will appear here
               </p>
             ) : (
-              getDisplayTodos().map((todo) => (
-                <div
-                  key={todo.id}
-                  draggable={editingId !== todo.id}
-                  onDragStart={(e) => handleDragStart(e, todo.id)}
-                  onDragOver={(e) => handleDragOver(e, todo.id)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, todo.id)}
-                  onDragEnd={handleDragEnd}
-                  className={`
-                    flex items-center gap-2
-                    p-2
-                    bg-black/10
-                    border rounded-sm
-                    transition-all duration-200
-                    ${editingId === todo.id ? 'cursor-default' : 'cursor-move'}
-                    ${draggedId === todo.id 
-                      ? 'border-white/50 shadow-lg' 
-                      : dragOverId === todo.id && draggedId 
-                        ? 'border-white/40' 
-                        : 'border-white/10 hover:border-white/30'
-                    }
-                  `}
-                  style={{
-                    boxShadow: draggedId === todo.id 
-                      ? '0 4px 8px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(0, 0, 0, 0.2)' 
-                      : 'inset 0 1px 1px rgba(0, 0, 0, 0.2)',
-                  }}
-                >
-                  {editingId !== todo.id && (
-                    <div
-                      data-drag-handle
-                      className="
-                        cursor-grab
-                        active:cursor-grabbing
-                        select-none
-                        flex items-center
-                        px-1
-                      "
-                      style={{ color: colors.secondary }}
-                    >
-                      <svg
-                        width="12"
-                        height="12"
-                        viewBox="0 0 12 12"
-                        fill="currentColor"
-                        className="opacity-60"
+              <>
+                {/* Active todos */}
+                {activeTodos.length > 0 && (
+                  <div className="space-y-2">
+                    {activeTodos.map(renderTodoItem)}
+                  </div>
+                )}
+                
+                {/* Completed todos section */}
+                {completedTodos.length > 0 && (
+                  <>
+                    <div className="flex items-center gap-2 pt-2 mt-2 border-t border-white/10">
+                      <span 
+                        className="text-xs font-mono uppercase tracking-wider"
+                        style={{ color: colors.secondary }}
                       >
-                        <circle cx="2" cy="2" r="1" />
-                        <circle cx="6" cy="2" r="1" />
-                        <circle cx="10" cy="2" r="1" />
-                        <circle cx="2" cy="6" r="1" />
-                        <circle cx="6" cy="6" r="1" />
-                        <circle cx="10" cy="6" r="1" />
-                        <circle cx="2" cy="10" r="1" />
-                        <circle cx="6" cy="10" r="1" />
-                        <circle cx="10" cy="10" r="1" />
-                      </svg>
+                        Completed
+                      </span>
+                      <button
+                        onClick={toggleShowCompleted}
+                        className="
+                          text-xs
+                          px-2 py-1
+                          hover:bg-white/10
+                          rounded
+                          transition-colors
+                          font-mono
+                        "
+                        style={{ color: colors.secondary }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.color = colors.primary;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color = colors.secondary;
+                        }}
+                      >
+                        {showCompleted ? 'Hide' : 'Show'}
+                      </button>
+                      {showCompleted && (
+                        <button
+                          onClick={clearAllCompleted}
+                          className="
+                            text-xs
+                            px-2 py-1
+                            hover:bg-white/10
+                            rounded
+                            transition-colors
+                            font-mono
+                          "
+                          style={{ color: colors.secondary }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = colors.primary;
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = colors.secondary;
+                          }}
+                        >
+                          Clear
+                        </button>
+                      )}
                     </div>
-                  )}
-                  <input
-                    type="checkbox"
-                    checked={todo.completed}
-                    onChange={() => toggleTodo(todo.id)}
-                    className="
-                      w-4 h-4
-                      cursor-pointer
-                    "
-                    style={{ accentColor: colors.secondary }}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    disabled={editingId === todo.id}
-                  />
-                  {editingId === todo.id ? (
-                    <input
-                      type="text"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      onKeyDown={(e) => handleEditKeyDown(e, todo.id)}
-                      onBlur={() => handleEditSave(todo.id)}
-                      autoFocus
-                      className="
-                        flex-1
-                        bg-black/10
-                        border border-white/20
-                        rounded-sm
-                        px-2 py-1
-                        font-mono
-                        text-sm
-                        focus:outline-none
-                        focus:border-white/50
-                        focus:ring-1 focus:ring-white/30
-                        transition-all duration-200
-                      "
-                      style={{
-                        color: colors.primary,
-                        boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.3)',
-                      }}
-                      data-placeholder-color={colors.placeholder}
-                      onMouseDown={(e) => e.stopPropagation()}
-                    />
-                  ) : (
-                    <span
-                      onDoubleClick={() => handleDoubleClick(todo.id, todo.text)}
-                      className={`
-                        flex-1
-                        text-sm
-                        cursor-text
-                        select-text
-                        ${todo.completed ? 'line-through' : ''}
-                      `}
-                      style={{ color: todo.completed ? colors.muted : colors.primary }}
-                    >
-                      {todo.text}
-                    </span>
-                  )}
-                  {editingId !== todo.id && (
-                    <button
-                      onClick={() => removeTodo(todo.id)}
-                      className="
-                        text-xs
-                        px-2 py-1
-                        hover:bg-white/10
-                        rounded
-                        transition-colors
-                      "
-                      style={{ color: colors.secondary }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.color = colors.primary;
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.color = colors.secondary;
-                      }}
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              ))
+                    {showCompleted && (
+                      <div className="space-y-2">
+                        {completedTodos.map(renderTodoItem)}
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
             )}
           </div>
         </div>
