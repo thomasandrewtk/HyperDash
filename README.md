@@ -1,17 +1,36 @@
+<div align="center">
+  <img src="HyperDash-Logo-Transparent.png" alt="HyperDash Logo" width="300">
+</div>
+
 # HyperDash
 
 Your reactive personal dashboard. Built with Next.js, TypeScript, and Tailwind CSS.
 
 ## Features
 
-- **Tiling Layout**: CSS Grid-based tiled window system
-- **Modern Aesthetic**: Dark theme with reactive colors, transparency, and backdrop blur
+- **Reactive Design System**: 
+  - Custom wallpaper support with automatic color adaptation
+  - Text colors dynamically adjust based on wallpaper brightness for optimal contrast
+  - Unified white/neutral borders that adapt to any background
+- **Tiling Layout**: CSS Grid-based layout with responsive design
+  - Top row: Clock, Weather, System Info (33.33% height)
+  - Bottom row: Todo List, Notepad (66.66% height, 50/50 split)
+- **Modern Aesthetic**: Dark theme with semi-transparent widgets, backdrop blur, and monospace fonts
 - **Interactive Widgets**:
-  - **Clock**: Real-time clock with date display
-  - **Weather**: Location-based weather (requires geolocation permission)
+  - **Clock**: Real-time clock with date display, 12h/24h format toggle
+  - **Weather**: Real-time weather data using Open-Meteo API (no API key required)
+    - Current temperature, feels-like, humidity, wind speed
+    - Daily high/low temperatures
+    - 6-hour hourly forecast
+    - Location-based (requires geolocation permission)
   - **Todo List**: Add, complete, and remove todos with persistent storage
   - **Notepad**: Text notes with auto-save to localStorage
-  - **System Info**: Browser info, screen size, storage usage, and uptime
+  - **System Info**: Browser info, screen size, storage usage, and session uptime
+- **Settings & Customization**:
+  - Wallpaper upload and management
+  - Clock format (12h/24h) preferences
+  - Data export/import functionality
+  - Clear all data option
 
 ## Getting Started
 
@@ -36,28 +55,36 @@ npm run dev
 
 ## Customization
 
+### Wallpaper & Reactive Colors
+
+HyperDash features a **reactive color system** that automatically adapts text colors based on your wallpaper's brightness:
+
+- **Upload your own wallpaper**: Click the Settings button in System Info widget
+- **Automatic color adjustment**: 
+  - Dark wallpapers: Text colors are brightened for better contrast
+  - Light wallpapers: Text colors are darkened for better readability
+  - Medium wallpapers: Minimal adjustment
+- **Color palette**: All text uses a green-based theme that adjusts dynamically
+- **Borders**: Unified white/neutral borders that work with any wallpaper
+
 ### Weather Widget
 
-The weather widget currently uses mock data. To enable real weather data:
-
-1. Sign up for a free API key at [OpenWeatherMap](https://openweathermap.org/api)
-2. Create a `.env.local` file:
-```
-NEXT_PUBLIC_WEATHER_API_KEY=your_api_key_here
-```
-3. Update `WeatherWidget.tsx` to use the API key (see commented code)
-
-### Color Scheme
-
-Widget border colors can be customized in the `Dashboard.tsx` component:
-- `green` - Default green borders
-- `blue` - Blue borders
-- `pink` - Pink borders
-- `cyan` - Cyan borders
+The weather widget uses the **Open-Meteo API** (free, no API key required):
+- Automatically detects your location via browser geolocation
+- Provides real-time weather data, hourly forecasts, and conditions
+- Updates every 10 minutes automatically
+- Works without any configuration or API keys
 
 ## Storage
 
-All data (todos and notes) is stored in browser localStorage and persists across sessions.
+All data is stored in browser localStorage and persists across sessions:
+- **Todos**: Task list items and completion status
+- **Notes**: Notepad content with auto-save
+- **Wallpaper**: Custom uploaded wallpaper images (base64 encoded)
+- **Color Settings**: Reactive color palette calculated from wallpaper
+- **Preferences**: Clock format (12h/24h) and other settings
+
+You can export/import all data through the Settings modal in the System Info widget.
 
 ## License
 
