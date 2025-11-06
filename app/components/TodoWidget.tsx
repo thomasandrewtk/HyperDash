@@ -18,6 +18,8 @@ export default function TodoWidget() {
   const [inputValue, setInputValue] = useState('');
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
   const { colors } = useReactiveColors();
 
   useEffect(() => {
@@ -66,7 +68,44 @@ export default function TodoWidget() {
     }
   };
 
+  const handleDoubleClick = (id: string, text: string) => {
+    setEditingId(id);
+    setEditValue(text);
+  };
+
+  const handleEditSave = (id: string) => {
+    if (editValue.trim()) {
+      saveTodos(
+        todos.map(todo =>
+          todo.id === id ? { ...todo, text: editValue.trim() } : todo
+        )
+      );
+    }
+    setEditingId(null);
+    setEditValue('');
+  };
+
+  const handleEditCancel = () => {
+    setEditingId(null);
+    setEditValue('');
+  };
+
+  const handleEditKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, id: string) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleEditSave(id);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      handleEditCancel();
+    }
+  };
+
   const handleDragStart = (e: React.DragEvent, id: string) => {
+    // Prevent dragging if this todo is being edited
+    if (editingId === id) {
+      e.preventDefault();
+      return;
+    }
     setDraggedId(id);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/html', '');
@@ -231,7 +270,7 @@ export default function TodoWidget() {
               getDisplayTodos().map((todo) => (
                 <div
                   key={todo.id}
-                  draggable
+                  draggable={editingId !== todo.id}
                   onDragStart={(e) => handleDragStart(e, todo.id)}
                   onDragOver={(e) => handleDragOver(e, todo.id)}
                   onDragLeave={handleDragLeave}
@@ -243,7 +282,7 @@ export default function TodoWidget() {
                     bg-black/10
                     border rounded-sm
                     transition-all duration-200
-                    cursor-move
+                    ${editingId === todo.id ? 'cursor-default' : 'cursor-move'}
                     ${draggedId === todo.id 
                       ? 'border-white/50 shadow-lg' 
                       : dragOverId === todo.id && draggedId 
@@ -257,35 +296,37 @@ export default function TodoWidget() {
                       : 'inset 0 1px 1px rgba(0, 0, 0, 0.2)',
                   }}
                 >
-                  <div
-                    data-drag-handle
-                    className="
-                      cursor-grab
-                      active:cursor-grabbing
-                      select-none
-                      flex items-center
-                      px-1
-                    "
-                    style={{ color: colors.secondary }}
-                  >
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 12 12"
-                      fill="currentColor"
-                      className="opacity-60"
+                  {editingId !== todo.id && (
+                    <div
+                      data-drag-handle
+                      className="
+                        cursor-grab
+                        active:cursor-grabbing
+                        select-none
+                        flex items-center
+                        px-1
+                      "
+                      style={{ color: colors.secondary }}
                     >
-                      <circle cx="2" cy="2" r="1" />
-                      <circle cx="6" cy="2" r="1" />
-                      <circle cx="10" cy="2" r="1" />
-                      <circle cx="2" cy="6" r="1" />
-                      <circle cx="6" cy="6" r="1" />
-                      <circle cx="10" cy="6" r="1" />
-                      <circle cx="2" cy="10" r="1" />
-                      <circle cx="6" cy="10" r="1" />
-                      <circle cx="10" cy="10" r="1" />
-                    </svg>
-                  </div>
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 12 12"
+                        fill="currentColor"
+                        className="opacity-60"
+                      >
+                        <circle cx="2" cy="2" r="1" />
+                        <circle cx="6" cy="2" r="1" />
+                        <circle cx="10" cy="2" r="1" />
+                        <circle cx="2" cy="6" r="1" />
+                        <circle cx="6" cy="6" r="1" />
+                        <circle cx="10" cy="6" r="1" />
+                        <circle cx="2" cy="10" r="1" />
+                        <circle cx="6" cy="10" r="1" />
+                        <circle cx="10" cy="10" r="1" />
+                      </svg>
+                    </div>
+                  )}
                   <input
                     type="checkbox"
                     checked={todo.completed}
@@ -296,36 +337,72 @@ export default function TodoWidget() {
                     "
                     style={{ accentColor: colors.secondary }}
                     onMouseDown={(e) => e.stopPropagation()}
+                    disabled={editingId === todo.id}
                   />
-                  <span
-                    className={`
-                      flex-1
-                      text-sm
-                      ${todo.completed ? 'line-through' : ''}
-                    `}
-                    style={{ color: todo.completed ? colors.muted : colors.primary }}
-                  >
-                    {todo.text}
-                  </span>
-                  <button
-                    onClick={() => removeTodo(todo.id)}
-                    className="
-                      text-xs
-                      px-2 py-1
-                      hover:bg-white/10
-                      rounded
-                      transition-colors
-                    "
-                    style={{ color: colors.secondary }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.color = colors.primary;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.color = colors.secondary;
-                    }}
-                  >
-                    ×
-                  </button>
+                  {editingId === todo.id ? (
+                    <input
+                      type="text"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={(e) => handleEditKeyDown(e, todo.id)}
+                      onBlur={() => handleEditSave(todo.id)}
+                      autoFocus
+                      className="
+                        flex-1
+                        bg-black/10
+                        border border-white/20
+                        rounded-sm
+                        px-2 py-1
+                        font-mono
+                        text-sm
+                        focus:outline-none
+                        focus:border-white/50
+                        focus:ring-1 focus:ring-white/30
+                        transition-all duration-200
+                      "
+                      style={{
+                        color: colors.primary,
+                        boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.3)',
+                      }}
+                      data-placeholder-color={colors.placeholder}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span
+                      onDoubleClick={() => handleDoubleClick(todo.id, todo.text)}
+                      className={`
+                        flex-1
+                        text-sm
+                        cursor-text
+                        select-text
+                        ${todo.completed ? 'line-through' : ''}
+                      `}
+                      style={{ color: todo.completed ? colors.muted : colors.primary }}
+                    >
+                      {todo.text}
+                    </span>
+                  )}
+                  {editingId !== todo.id && (
+                    <button
+                      onClick={() => removeTodo(todo.id)}
+                      className="
+                        text-xs
+                        px-2 py-1
+                        hover:bg-white/10
+                        rounded
+                        transition-colors
+                      "
+                      style={{ color: colors.secondary }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = colors.primary;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = colors.secondary;
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               ))
             )}
