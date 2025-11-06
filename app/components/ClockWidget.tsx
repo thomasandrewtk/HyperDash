@@ -52,13 +52,14 @@ export default function ClockWidget() {
 
   // Listen for clock format changes
   useEffect(() => {
-    const handleClockFormatChange = (e: CustomEvent) => {
-      setClockFormat(e.detail);
+    const handleClockFormatChange = (e: Event) => {
+      const customEvent = e as CustomEvent<'12h' | '24h'>;
+      setClockFormat(customEvent.detail);
     };
 
-    window.addEventListener('clockFormatChanged', handleClockFormatChange as EventListener);
+    window.addEventListener('clockFormatChanged', handleClockFormatChange);
     return () => {
-      window.removeEventListener('clockFormatChanged', handleClockFormatChange as EventListener);
+      window.removeEventListener('clockFormatChanged', handleClockFormatChange);
     };
   }, []);
 

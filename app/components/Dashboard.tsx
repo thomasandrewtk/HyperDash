@@ -22,14 +22,15 @@ export default function Dashboard() {
     }
 
     // Listen for wallpaper changes
-    const handleWallpaperChange = (e: CustomEvent) => {
-      setWallpaper(e.detail);
+    const handleWallpaperChange = (e: Event) => {
+      const customEvent = e as CustomEvent<string | null>;
+      setWallpaper(customEvent.detail);
     };
 
-    window.addEventListener('wallpaperChanged', handleWallpaperChange as EventListener);
+    window.addEventListener('wallpaperChanged', handleWallpaperChange);
 
     return () => {
-      window.removeEventListener('wallpaperChanged', handleWallpaperChange as EventListener);
+      window.removeEventListener('wallpaperChanged', handleWallpaperChange);
     };
   }, []);
 

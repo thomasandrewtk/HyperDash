@@ -25,8 +25,9 @@ export function ColorProvider({ children }: { children: ReactNode }) {
 
   // Listen for wallpaper changes
   useEffect(() => {
-    const handleWallpaperChange = async (e: CustomEvent) => {
-      const imageSrc = e.detail;
+    const handleWallpaperChange = async (e: Event) => {
+      const customEvent = e as CustomEvent<string | null>;
+      const imageSrc = customEvent.detail;
       if (imageSrc) {
         await updateColorsFromWallpaper(imageSrc);
       } else {
@@ -35,10 +36,10 @@ export function ColorProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    window.addEventListener('wallpaperChanged', handleWallpaperChange as EventListener);
+    window.addEventListener('wallpaperChanged', handleWallpaperChange);
 
     return () => {
-      window.removeEventListener('wallpaperChanged', handleWallpaperChange as EventListener);
+      window.removeEventListener('wallpaperChanged', handleWallpaperChange);
     };
   }, []);
 
