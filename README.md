@@ -23,7 +23,7 @@ Your reactive personal dashboard. Built with Next.js, TypeScript, and Tailwind C
     - Daily high/low temperatures
     - 6-hour hourly forecast
     - Location-based (requires geolocation permission)
-  - **Todo List**: Add, complete, and remove todos with persistent storage
+  - **Todo List**: Add, complete, remove, and drag-and-drop reorder todos with persistent storage
   - **Notepad**: Text notes with auto-save to localStorage
   - **System Info**: Browser info, screen size, storage usage, and session uptime
 - **Settings & Customization**:

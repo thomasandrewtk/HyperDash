@@ -94,6 +94,12 @@ All widgets use the base `Widget` component:
 - Todo items with `border-white/10`, hover: `border-white/30`
 - Checkbox accent: `accent-green-400` (matches text scheme)
 - Delete button: `text-green-400`, hover: `text-green-300`
+- **Drag-and-drop reordering**: 
+  - Drag handle (grid of dots SVG) positioned to the left of delete button
+  - Real-time visual reordering as you drag (items shift position immediately)
+  - Browser drag ghost image is hidden using transparent canvas
+  - Uses `draggedId` and `dragOverId` state for tracking
+  - `getDisplayTodos()` function calculates visual order during drag
 
 #### Notepad Widget
 - Textarea with `border-white/20`, focus: `border-white/50`
@@ -305,5 +311,85 @@ function MyComponent() {
 ### Divider
 ```tsx
 <div className="border-t border-white/10 pt-2" />
+```
+
+### Drag-and-Drop Reordering Pattern
+
+When implementing drag-and-drop reordering for lists:
+
+**State Management:**
+- Track `draggedId`: The item currently being dragged
+- Track `dragOverId`: The item currently being hovered over during drag
+- Reset both states on `dragEnd` and `drop`
+
+**Visual Reordering:**
+- Implement `getDisplayTodos()` function that calculates the visual order during drag
+- This function should reorder the array based on `draggedId` and `dragOverId`
+- Render using `getDisplayTodos()` instead of the original array during drag operations
+- The dragged item should appear in its new position visually, not stay in place with opacity
+
+**Hide Browser Drag Ghost:**
+- Use transparent canvas element in `handleDragStart`:
+```tsx
+const handleDragStart = (e: React.DragEvent, id: string) => {
+  setDraggedId(id);
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/html', '');
+  
+  // Hide the default drag ghost image
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 1;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.clearRect(0, 0, 1, 1);
+    e.dataTransfer.setDragImage(canvas, 0, 0);
+  }
+};
+```
+
+**Drag Handle Pattern:**
+- Use grid of dots SVG icon (3x3 circles) for drag handle
+- Position handle to the left of action buttons (delete, etc.)
+- Style with `cursor-grab` and `active:cursor-grabbing`
+- Use reactive colors: `style={{ color: colors.secondary }}`
+- Make handle `select-none` to prevent text selection
+
+**Event Handlers:**
+- `onDragStart`: Set `draggedId`, hide drag ghost
+- `onDragOver`: Set `dragOverId`, prevent default
+- `onDragLeave`: Minimal handling (prevent flickering)
+- `onDrop`: Apply reordering, save to state/storage, reset drag states
+- `onDragEnd`: Fallback to apply visual order if drag ends without drop, reset states
+
+**Visual Feedback:**
+- Dragged item: Enhanced border (`border-white/50`) and shadow (`shadow-lg`)
+- Drop target: Subtle border highlight (`border-white/40`)
+- Use `transition-all duration-200` for smooth animations
+- Keep dragged item fully visible (no opacity reduction) - it should appear naturally in its new position
+
+**Example Pattern:**
+```tsx
+const [draggedId, setDraggedId] = useState<string | null>(null);
+const [dragOverId, setDragOverId] = useState<string | null>(null);
+
+const getDisplayTodos = () => {
+  if (!draggedId || !dragOverId || draggedId === dragOverId) {
+    return todos;
+  }
+  
+  const draggedIndex = todos.findIndex(todo => todo.id === draggedId);
+  const targetIndex = todos.findIndex(todo => todo.id === dragOverId);
+  
+  if (draggedIndex === -1 || targetIndex === -1) return todos;
+  
+  const newTodos = [...todos];
+  const [removed] = newTodos.splice(draggedIndex, 1);
+  newTodos.splice(targetIndex, 0, removed);
+  
+  return newTodos;
+};
+
+// Render: getDisplayTodos().map(...)
 ```
 

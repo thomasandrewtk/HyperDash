@@ -16,6 +16,8 @@ interface Todo {
 export default function TodoWidget() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [inputValue, setInputValue] = useState('');
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
   const { colors } = useReactiveColors();
 
   useEffect(() => {
@@ -62,6 +64,108 @@ export default function TodoWidget() {
     if (e.key === 'Enter') {
       addTodo();
     }
+  };
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', '');
+    
+    // Hide the default drag ghost image by using a transparent canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, 1, 1);
+      e.dataTransfer.setDragImage(canvas, 0, 0);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedId && draggedId !== targetId) {
+      setDragOverId(targetId);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Don't clear immediately - let dragOver handle updates
+    // This prevents flickering when moving between child elements
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    if (!draggedId) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    // Use dragOverId if available (current hover target), otherwise use targetId (drop target)
+    const finalTargetId = dragOverId || targetId;
+    
+    if (draggedId === finalTargetId) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    const draggedIndex = todos.findIndex(todo => todo.id === draggedId);
+    const targetIndex = todos.findIndex(todo => todo.id === finalTargetId);
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      setDraggedId(null);
+      setDragOverId(null);
+      return;
+    }
+
+    const newTodos = [...todos];
+    const [removed] = newTodos.splice(draggedIndex, 1);
+    newTodos.splice(targetIndex, 0, removed);
+
+    saveTodos(newTodos);
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  const handleDragEnd = () => {
+    // If we ended drag without dropping, make sure to apply the visual order
+    if (draggedId && dragOverId && draggedId !== dragOverId) {
+      const draggedIndex = todos.findIndex(todo => todo.id === draggedId);
+      const targetIndex = todos.findIndex(todo => todo.id === dragOverId);
+
+      if (draggedIndex !== -1 && targetIndex !== -1) {
+        const newTodos = [...todos];
+        const [removed] = newTodos.splice(draggedIndex, 1);
+        newTodos.splice(targetIndex, 0, removed);
+        saveTodos(newTodos);
+      }
+    }
+    
+    setDraggedId(null);
+    setDragOverId(null);
+  };
+
+  // Calculate visual order during drag
+  const getDisplayTodos = () => {
+    if (!draggedId || !dragOverId || draggedId === dragOverId) {
+      return todos;
+    }
+
+    const draggedIndex = todos.findIndex(todo => todo.id === draggedId);
+    const targetIndex = todos.findIndex(todo => todo.id === dragOverId);
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      return todos;
+    }
+
+    const newTodos = [...todos];
+    const [removed] = newTodos.splice(draggedIndex, 1);
+    newTodos.splice(targetIndex, 0, removed);
+
+    return newTodos;
   };
 
   return (
@@ -124,22 +228,64 @@ export default function TodoWidget() {
                 No todos yet. Add one above!
               </p>
             ) : (
-              todos.map((todo) => (
+              getDisplayTodos().map((todo) => (
                 <div
                   key={todo.id}
-                  className="
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, todo.id)}
+                  onDragOver={(e) => handleDragOver(e, todo.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, todo.id)}
+                  onDragEnd={handleDragEnd}
+                  className={`
                     flex items-center gap-2
                     p-2
                     bg-black/10
-                    border border-white/10
-                    rounded-sm
-                    hover:border-white/30
+                    border rounded-sm
                     transition-all duration-200
-                  "
+                    cursor-move
+                    ${draggedId === todo.id 
+                      ? 'border-white/50 shadow-lg' 
+                      : dragOverId === todo.id && draggedId 
+                        ? 'border-white/40' 
+                        : 'border-white/10 hover:border-white/30'
+                    }
+                  `}
                   style={{
-                    boxShadow: 'inset 0 1px 1px rgba(0, 0, 0, 0.2)',
+                    boxShadow: draggedId === todo.id 
+                      ? '0 4px 8px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(0, 0, 0, 0.2)' 
+                      : 'inset 0 1px 1px rgba(0, 0, 0, 0.2)',
                   }}
                 >
+                  <div
+                    data-drag-handle
+                    className="
+                      cursor-grab
+                      active:cursor-grabbing
+                      select-none
+                      flex items-center
+                      px-1
+                    "
+                    style={{ color: colors.secondary }}
+                  >
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 12 12"
+                      fill="currentColor"
+                      className="opacity-60"
+                    >
+                      <circle cx="2" cy="2" r="1" />
+                      <circle cx="6" cy="2" r="1" />
+                      <circle cx="10" cy="2" r="1" />
+                      <circle cx="2" cy="6" r="1" />
+                      <circle cx="6" cy="6" r="1" />
+                      <circle cx="10" cy="6" r="1" />
+                      <circle cx="2" cy="10" r="1" />
+                      <circle cx="6" cy="10" r="1" />
+                      <circle cx="10" cy="10" r="1" />
+                    </svg>
+                  </div>
                   <input
                     type="checkbox"
                     checked={todo.completed}
@@ -149,6 +295,7 @@ export default function TodoWidget() {
                       cursor-pointer
                     "
                     style={{ accentColor: colors.secondary }}
+                    onMouseDown={(e) => e.stopPropagation()}
                   />
                   <span
                     className={`
