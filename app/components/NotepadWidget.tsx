@@ -67,11 +67,13 @@ export default function NotepadWidget() {
     if (!editorRef.current) return;
     
     const images = editorRef.current.querySelectorAll<HTMLImageElement>('img.notepad-image');
+    const timeouts: NodeJS.Timeout[] = [];
     
     const handleMouseEnter = (img: HTMLImageElement) => {
       const updateHover = () => {
+        if (!editorRef.current) return;
         const rect = img.getBoundingClientRect();
-        const editorRect = editorRef.current!.getBoundingClientRect();
+        const editorRect = editorRef.current.getBoundingClientRect();
         setHoveredImage({
           img,
           rect: {
@@ -86,7 +88,7 @@ export default function NotepadWidget() {
     
     const handleMouseLeave = () => {
       // Small delay to allow moving to controls
-      setTimeout(() => {
+      const timeout = setTimeout(() => {
         setHoveredImage((prev) => {
           // Only clear if mouse is not over controls
           if (prev && !controlsRef.current?.matches(':hover')) {
@@ -95,6 +97,7 @@ export default function NotepadWidget() {
           return prev;
         });
       }, 100);
+      timeouts.push(timeout);
     };
     
     images.forEach((img) => {
@@ -134,6 +137,14 @@ export default function NotepadWidget() {
     });
     
     updateImageControls();
+    
+    // Cleanup function
+    return () => {
+      // Clear any pending timeouts
+      timeouts.forEach(timeout => clearTimeout(timeout));
+      // Clear hover state on cleanup
+      setHoveredImage(null);
+    };
   }, [content, updateImageControls]);
 
   // Update controls on scroll

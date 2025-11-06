@@ -1,8 +1,8 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { ColorPalette, getDefaultPalette, analyzeWallpaperBrightness, calculateReactiveColors } from '@/app/lib/colorUtils';
-import { getFromLocalStorage } from '@/app/lib/utils';
+import { getFromLocalStorage, saveToLocalStorage, removeFromLocalStorage } from '@/app/lib/utils';
 
 interface ColorContextType {
   colors: ColorPalette;
@@ -15,13 +15,44 @@ const ColorContext = createContext<ColorContextType | undefined>(undefined);
 export function ColorProvider({ children }: { children: ReactNode }) {
   const [colors, setColors] = useState<ColorPalette>(getDefaultPalette());
 
-  // Load saved colors or analyze wallpaper on mount
+  const updateColorsFromWallpaper = useCallback(async (imageSrc: string) => {
+    try {
+      const brightness = await analyzeWallpaperBrightness(imageSrc);
+      const newColors = calculateReactiveColors(brightness);
+      setColors(newColors);
+      
+      // Save to localStorage for persistence
+      saveToLocalStorage('reactiveColors', JSON.stringify(newColors));
+    } catch (error) {
+      console.error('Error analyzing wallpaper:', error);
+      // Fallback to default on error
+      setColors(getDefaultPalette());
+    }
+  }, []);
+
+  const resetToDefault = useCallback(() => {
+    setColors(getDefaultPalette());
+    removeFromLocalStorage('reactiveColors');
+  }, []);
+
+  // Load saved colors from localStorage on mount, then analyze wallpaper if available
   useEffect(() => {
+    const savedColors = getFromLocalStorage('reactiveColors');
+    if (savedColors) {
+      try {
+        const parsed = JSON.parse(savedColors);
+        setColors(parsed);
+      } catch (error) {
+        console.error('Error parsing saved colors:', error);
+      }
+    }
+    
+    // After loading saved colors, check if wallpaper needs analysis
     const savedWallpaper = getFromLocalStorage('wallpaper');
     if (savedWallpaper) {
       updateColorsFromWallpaper(savedWallpaper).catch(console.error);
     }
-  }, []);
+  }, [updateColorsFromWallpaper]);
 
   // Listen for wallpaper changes
   useEffect(() => {
@@ -41,44 +72,7 @@ export function ColorProvider({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener('wallpaperChanged', handleWallpaperChange);
     };
-  }, []);
-
-  const updateColorsFromWallpaper = async (imageSrc: string) => {
-    try {
-      const brightness = await analyzeWallpaperBrightness(imageSrc);
-      const newColors = calculateReactiveColors(brightness);
-      setColors(newColors);
-      
-      // Save to localStorage for persistence
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('reactiveColors', JSON.stringify(newColors));
-      }
-    } catch (error) {
-      console.error('Error analyzing wallpaper:', error);
-      // Fallback to default on error
-      setColors(getDefaultPalette());
-    }
-  };
-
-  const resetToDefault = () => {
-    setColors(getDefaultPalette());
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('reactiveColors');
-    }
-  };
-
-  // Load saved colors from localStorage on mount
-  useEffect(() => {
-    const savedColors = getFromLocalStorage('reactiveColors');
-    if (savedColors) {
-      try {
-        const parsed = JSON.parse(savedColors);
-        setColors(parsed);
-      } catch (error) {
-        console.error('Error parsing saved colors:', error);
-      }
-    }
-  }, []);
+  }, [updateColorsFromWallpaper, resetToDefault]);
 
   // Set CSS custom properties for dynamic styling (especially placeholders)
   useEffect(() => {

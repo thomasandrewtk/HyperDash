@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Widget from './Widget';
 import { useReactiveColors } from './ColorContext';
 import { getFromLocalStorage, saveToLocalStorage } from '@/app/lib/utils';
@@ -50,6 +50,52 @@ export default function ClockWidget() {
     // Don't restore running state - start paused on page load
   }, []);
 
+  const handleTimerComplete = useCallback(() => {
+    // Play notification sound (using Web Audio API or a simple beep)
+    if (typeof window !== 'undefined' && 'AudioContext' in window) {
+      try {
+        const audioContext = new AudioContext();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.value = 800;
+        oscillator.type = 'sine';
+        
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.5);
+      } catch (error) {
+        console.error('Error playing notification:', error);
+      }
+    }
+
+    // Cycle to next mode
+    setMode((currentMode) => {
+      if (currentMode === 'work') {
+        const newCount = pomodoroCount + 1;
+        setPomodoroCount(newCount);
+        
+        // Every 4 pomodoros, take a long break
+        if (newCount % 4 === 0) {
+          setTimeLeft(LONG_BREAK_DURATION);
+          return 'longBreak';
+        } else {
+          setTimeLeft(SHORT_BREAK_DURATION);
+          return 'shortBreak';
+        }
+      } else {
+        // Break is over, back to work
+        setTimeLeft(WORK_DURATION);
+        return 'work';
+      }
+    });
+  }, [pomodoroCount]);
+
   // Listen for clock format changes
   useEffect(() => {
     const handleClockFormatChange = (e: Event) => {
@@ -78,8 +124,7 @@ export default function ClockWidget() {
       intervalRef.current = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
-            // Timer completed
-            handleTimerComplete();
+            // Timer completed - will be handled by effect cleanup
             return 0;
           }
           return prev - 1;
@@ -88,15 +133,25 @@ export default function ClockWidget() {
     } else {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     }
 
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
   }, [isRunning]);
+
+  // Handle timer completion
+  useEffect(() => {
+    if (timeLeft === 0 && isRunning) {
+      setIsRunning(false);
+      handleTimerComplete();
+    }
+  }, [timeLeft, isRunning, handleTimerComplete]);
 
   // Save state to localStorage
   useEffect(() => {
@@ -104,51 +159,6 @@ export default function ClockWidget() {
     saveToLocalStorage('pomodoroMode', mode);
     saveToLocalStorage('pomodoroCount', pomodoroCount.toString());
   }, [timeLeft, mode, pomodoroCount]);
-
-  const handleTimerComplete = () => {
-    setIsRunning(false);
-    // Play notification sound (using Web Audio API or a simple beep)
-    if (typeof window !== 'undefined' && 'AudioContext' in window) {
-      try {
-        const audioContext = new AudioContext();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        oscillator.frequency.value = 800;
-        oscillator.type = 'sine';
-        
-        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-        
-        oscillator.start(audioContext.currentTime);
-        oscillator.stop(audioContext.currentTime + 0.5);
-      } catch (error) {
-        console.error('Error playing notification:', error);
-      }
-    }
-
-    // Cycle to next mode
-    if (mode === 'work') {
-      const newCount = pomodoroCount + 1;
-      setPomodoroCount(newCount);
-      
-      // Every 4 pomodoros, take a long break
-      if (newCount % 4 === 0) {
-        setMode('longBreak');
-        setTimeLeft(LONG_BREAK_DURATION);
-      } else {
-        setMode('shortBreak');
-        setTimeLeft(SHORT_BREAK_DURATION);
-      }
-    } else {
-      // Break is over, back to work
-      setMode('work');
-      setTimeLeft(WORK_DURATION);
-    }
-  };
 
   const handleStartPause = () => {
     setIsRunning(!isRunning);

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Widget from './Widget';
-import { getFromLocalStorage, saveToLocalStorage } from '@/app/lib/utils';
+import { getFromLocalStorage, saveToLocalStorage, removeFromLocalStorage } from '@/app/lib/utils';
 import { useReactiveColors } from './ColorContext';
 
 interface SystemInfo {
@@ -128,7 +128,7 @@ export default function SystemInfoWidget() {
 
   const handleResetWallpaper = () => {
     setWallpaperPreview(null);
-    window.localStorage.removeItem('wallpaper');
+    removeFromLocalStorage('wallpaper');
     // Trigger custom event to reset to default
     window.dispatchEvent(new CustomEvent('wallpaperChanged', { detail: null }));
   };

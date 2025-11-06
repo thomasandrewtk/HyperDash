@@ -76,7 +76,20 @@ export default function WeatherWidget() {
       try {
         // Get user's location
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject);
+          navigator.geolocation.getCurrentPosition(
+            resolve,
+            (error) => {
+              // Provide better error messaging
+              if (error.code === error.PERMISSION_DENIED) {
+                setError('Location access denied. Please enable location permissions to view weather.');
+              } else if (error.code === error.POSITION_UNAVAILABLE) {
+                setError('Location unavailable. Please check your connection.');
+              } else {
+                setError('Unable to get location. Please try again.');
+              }
+              reject(error);
+            }
+          );
         });
 
         const { latitude, longitude } = position.coords;
