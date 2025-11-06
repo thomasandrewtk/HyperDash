@@ -1,0 +1,309 @@
+# HyperDash - Design Rules & Guidelines
+
+## IMPORTANT: Rules File Maintenance
+
+**After making any changes to the codebase, ALWAYS ask the user:**
+"Do you want me to update the .cursorrules file with any new patterns, conventions, or SOPs that were established?"
+
+This ensures the rules file stays current with evolving project standards and helps maintain consistency across the codebase.
+
+## Project Overview
+A reactive personal dashboard webapp. Built with Next.js 15, TypeScript, Tailwind CSS, and React.
+
+## Color Scheme
+
+### Reactive Color System
+
+**IMPORTANT**: Text colors are now dynamically reactive to the wallpaper background. The system analyzes wallpaper brightness and adjusts the green color palette accordingly for optimal contrast and readability.
+
+**How it works:**
+- Wallpaper brightness is analyzed when a wallpaper is uploaded or changed
+- Color adjustments are calculated based on brightness:
+  - Dark wallpapers (brightness < 0.3): Increase text brightness by 20-30% for better contrast
+  - Medium wallpapers (0.3-0.7): Minimal adjustment
+  - Light wallpapers (brightness > 0.7): Decrease text brightness by 15-25% for better contrast
+- Colors are stored in React Context and persisted to localStorage
+- CSS custom properties are set for global access (especially for placeholders)
+
+**Color Palette Structure:**
+- **primary**: Main content text (equivalent to green-300, dynamically adjusted)
+- **secondary**: Labels, headings, secondary information (equivalent to green-400, dynamically adjusted)
+- **placeholder**: Input placeholders (equivalent to green-500/80, dynamically adjusted)
+- **muted**: Completed/strikethrough items (equivalent to green-600, dynamically adjusted)
+- **button**: Button labels (equivalent to green-300, dynamically adjusted)
+
+**Default Colors (fallback):**
+- Primary: `rgb(134, 239, 172)` (green-300)
+- Secondary: `rgb(74, 222, 128)` (green-400)
+- Placeholder: `rgba(34, 197, 94, 0.8)` (green-500/80)
+- Muted: `rgb(22, 163, 74)` (green-600)
+- Button: `rgb(134, 239, 172)` (green-300)
+
+### Text Colors (Primary)
+**NOTE**: Use `useReactiveColors()` hook instead of hardcoded Tailwind classes for text colors.
+
+- **Primary Text**: Use `colors.primary` from `useReactiveColors()` hook - Main content text
+- **Labels/Secondary Text**: Use `colors.secondary` - Labels, headings, secondary information
+- **Placeholder Text**: Use `colors.placeholder` - Input placeholders (automatically styled via CSS)
+- **Muted Text**: Use `colors.muted` - Only for completed/strikethrough items (intentionally muted)
+- **Button Text**: Use `colors.button` - Button labels
+
+### Borders (Unified Neutral)
+- **Default Border**: `border-white/20` - All widget borders, input fields, buttons
+- **Hover Border**: `border-white/50` - More visible on hover
+- **Focus Border**: `border-white/50` - Input focus states
+- **Internal Dividers**: `border-white/10` - Subtle dividers within widgets
+- **NO COLORED BORDERS** - All borders must be white/neutral to be reactive to wallpaper
+
+### Backgrounds
+- **Widget Background**: `bg-black/40` - Semi-transparent with backdrop blur
+- **Input Fields**: `bg-black/10` - Subtle background for inputs
+- **Buttons**: `bg-white/10` - Default button background
+- **Button Hover**: `bg-white/15` - Hover state
+- **Modal Background**: `bg-black/40 backdrop-blur-xl` - Same as widgets
+
+### Shadows
+- **Widget Shadow**: Standard dark shadow with subtle inset highlight
+- **Button Shadow**: `hover:shadow-white/20` - White glow on hover
+- **Input Shadow**: `inset 0 1px 2px rgba(0, 0, 0, 0.3)` - Subtle inset shadow
+
+### Scrollbar
+- **Thumb**: `rgba(255, 255, 255, 0.2)` - Neutral white
+- **Thumb Hover**: `rgba(255, 255, 255, 0.4)` - More visible on hover
+
+## Component Structure
+
+### Widget Component
+All widgets use the base `Widget` component:
+- Unified white border (`border-white/20`)
+- Semi-transparent background (`bg-black/40 backdrop-blur-xl`)
+- Hover border becomes `border-white/50`
+- Title with `border-white/10` divider
+- Flex column layout with proper height constraints
+
+### Layout Structure
+- **Top Row (33.33% height)**: Clock, Weather, System Info - 3 equal columns
+- **Bottom Row (66.66% height)**: Todo List, Notepad - 50/50 split
+- Grid layout with proper height constraints (`flex-1 min-h-0`)
+
+### Widget-Specific Patterns
+
+#### Todo Widget
+- Input field with `border-white/20`, focus: `border-white/50`
+- Add button with neutral white styling
+- Todo items with `border-white/10`, hover: `border-white/30`
+- Checkbox accent: `accent-green-400` (matches text scheme)
+- Delete button: `text-green-400`, hover: `text-green-300`
+
+#### Notepad Widget
+- Textarea with `border-white/20`, focus: `border-white/50`
+- Scrollable content area with `overflow-y-auto min-h-0`
+
+#### System Info Widget
+- Labels: `text-green-400`
+- Values: `text-green-300`
+- Settings button: Neutral white styling
+- Modal: Same styling as widgets
+
+## Styling Conventions
+
+### Border Rules
+1. **NEVER use colored borders** (pink, blue, cyan, green for borders)
+2. Always use `border-white/[opacity]` for consistency
+3. Default: `border-white/20`
+4. Hover/Focus: `border-white/50`
+5. Internal dividers: `border-white/10`
+
+### Background Rules
+1. Widgets: `bg-black/40` with `backdrop-blur-xl`
+2. Inputs: `bg-black/10`
+3. Buttons: `bg-white/10`
+4. Always use semi-transparent backgrounds for blur effect
+
+### Text Rules
+1. **NEVER use hardcoded Tailwind green color classes** (e.g., `text-green-300`, `text-green-400`)
+2. **ALWAYS use `useReactiveColors()` hook** to access reactive color palette
+3. Apply colors via inline styles: `style={{ color: colors.primary }}`
+4. Primary content: `colors.primary`
+5. Labels/secondary: `colors.secondary`
+6. Placeholders: `colors.placeholder` (automatically styled via CSS custom properties)
+7. Muted (completed items): `colors.muted`
+8. Buttons: `colors.button`
+
+### Spacing & Layout
+- Use `flex-1 min-h-0` for scrollable containers
+- Use `overflow-hidden` on parent containers to constrain children
+- Padding: `p-4` for widgets, `p-3` for inputs
+- Gap: `gap-4` between widgets, `gap-2` for internal spacing
+
+## Widget Requirements
+
+### All Widgets Must:
+1. Use the base `Widget` component (no custom border colors)
+2. Have proper height constraints for scrolling when needed
+3. Use consistent text color hierarchy
+4. Have neutral white borders (reactive to wallpaper)
+5. Support proper hover states with more visible borders
+
+### Input Fields Must:
+1. Use `border-white/20` default
+2. Use `border-white/50` on focus
+3. Use `style={{ color: colors.primary }}` for text color (from `useReactiveColors()`)
+4. Placeholder color is automatically handled via CSS custom property `--text-placeholder`
+5. Have `bg-black/10` background
+6. Include proper inset shadows
+
+### Buttons Must:
+1. Use `bg-white/10` background
+2. Use `border-white/30` border
+3. Use `style={{ color: colors.button }}` for text color (from `useReactiveColors()`)
+4. Hover: `bg-white/15`, `border-white/50`
+5. Include subtle shadows
+
+## File Structure
+```
+app/
+  components/
+    Widget.tsx          # Base widget component
+    Dashboard.tsx       # Main layout
+    ColorContext.tsx    # Reactive color context provider
+    ClockWidget.tsx
+    WeatherWidget.tsx
+    SystemInfoWidget.tsx
+    TodoWidget.tsx
+    NotepadWidget.tsx
+  lib/
+    utils.ts            # localStorage helpers
+    colorUtils.ts       # Wallpaper analysis and color calculation
+  globals.css           # Global styles, scrollbar, CSS custom properties
+```
+
+## Key Principles
+
+1. **Wallpaper Reactive**: 
+   - All borders use white/neutral colors that adapt to background via backdrop blur
+   - Text colors dynamically adjust based on wallpaper brightness for optimal contrast
+2. **Consistency**: Unified color scheme across all widgets
+3. **Visibility**: Text colors automatically adapt for readability on any wallpaper
+4. **Modern Aesthetic**: Monospace fonts, thin borders, semi-transparency, backdrop blur
+5. **Accessibility**: Good contrast ratios while maintaining aesthetic, automatically optimized per wallpaper
+
+## Reactive Color System
+
+### Implementation Details
+
+**Files:**
+- `app/lib/colorUtils.ts`: Contains wallpaper analysis and color calculation functions
+- `app/components/ColorContext.tsx`: React context provider for reactive colors
+- `app/globals.css`: CSS custom properties for global color access
+
+**Usage in Components:**
+```tsx
+import { useReactiveColors } from './ColorContext';
+
+export default function MyWidget() {
+  const { colors } = useReactiveColors();
+  
+  return (
+    <div style={{ color: colors.primary }}>
+      <h2 style={{ color: colors.secondary }}>Title</h2>
+      <input style={{ color: colors.primary }} />
+      {/* Placeholder automatically styled via CSS */}
+    </div>
+  );
+}
+```
+
+**Color Calculation Algorithm:**
+1. Wallpaper image is analyzed using canvas API (downsampled for performance)
+2. Average brightness is calculated using weighted formula: `(R * 0.299 + G * 0.587 + B * 0.114) / 255`
+3. Brightness is normalized to 0-1 scale
+4. Adjustment factor is calculated:
+   - Dark (< 0.3): factor = 1 + (0.3 - brightness) * 0.8
+   - Medium (0.3-0.7): factor = 1.0
+   - Light (> 0.7): factor = 1 - (brightness - 0.7) * 0.6
+5. RGB values are adjusted while maintaining hue (green theme preserved)
+
+**CSS Custom Properties:**
+- `--text-primary`: Set dynamically by ColorContext
+- `--text-secondary`: Set dynamically by ColorContext
+- `--text-placeholder`: Set dynamically by ColorContext (used for input/textarea placeholders)
+- `--text-muted`: Set dynamically by ColorContext
+- `--text-button`: Set dynamically by ColorContext
+
+**Persistence:**
+- Reactive colors are saved to localStorage when wallpaper changes
+- Colors are restored on page load if wallpaper exists
+- Default colors used if no wallpaper or analysis fails
+
+## Adding New Widgets
+
+When adding new widgets:
+1. Use the base `Widget` component (no `borderColor` prop)
+2. Follow the unified white border scheme
+3. **Import and use `useReactiveColors()` hook** to access dynamic colors
+4. Apply colors via inline styles: `style={{ color: colors.primary }}`
+5. **NEVER use hardcoded Tailwind green classes** (text-green-300, etc.)
+6. Ensure proper height constraints for scrolling if needed
+7. Match button and input styling patterns
+8. Test hover states for visibility
+9. Placeholder colors are handled automatically via CSS
+
+## Common Patterns
+
+### Scrollable Container
+```tsx
+<div className="flex-1 overflow-y-auto min-h-0">
+  {/* Content */}
+</div>
+```
+
+### Input Field
+```tsx
+import { useReactiveColors } from './ColorContext';
+
+function MyComponent() {
+  const { colors } = useReactiveColors();
+  
+  return (
+    <input
+      className="
+        bg-black/10
+        border border-white/20
+        focus:border-white/50
+      "
+      style={{ color: colors.primary }}
+      // Placeholder automatically styled via CSS custom property
+    />
+  );
+}
+```
+
+### Button
+```tsx
+import { useReactiveColors } from './ColorContext';
+
+function MyComponent() {
+  const { colors } = useReactiveColors();
+  
+  return (
+    <button
+      className="
+        bg-white/10
+        border border-white/30
+        hover:bg-white/15
+        hover:border-white/50
+      "
+      style={{ color: colors.button }}
+    >
+      Button Text
+    </button>
+  );
+}
+```
+
+### Divider
+```tsx
+<div className="border-t border-white/10 pt-2" />
+```
+
