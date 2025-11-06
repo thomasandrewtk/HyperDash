@@ -77,7 +77,11 @@ A reactive personal dashboard webapp. Built with Next.js 15, TypeScript, Tailwin
 All widgets use the base `Widget` component:
 - Unified white border (`border-white/20`)
 - Semi-transparent background (`bg-black/40 backdrop-blur-xl`)
-- Hover border becomes `border-white/50`
+- Hover effects:
+  - Border transitions to `border-white/50`
+  - Subtle upward lift (`hover:-translate-y-[1px]`)
+  - Enhanced shadow (`hover:shadow-xl`)
+  - Smooth 300ms transition (`transition-all duration-300`)
 - Title with `border-white/10` divider
 - Flex column layout with proper height constraints
 
@@ -149,7 +153,11 @@ All widgets use the base `Widget` component:
 2. Have proper height constraints for scrolling when needed
 3. Use consistent text color hierarchy
 4. Have neutral white borders (reactive to wallpaper)
-5. Support proper hover states with more visible borders
+5. Support hover effects (automatic via base Widget component):
+   - Border transition to `border-white/50`
+   - Subtle upward lift of 1px
+   - Enhanced shadow
+   - Smooth 300ms transition
 
 ### Input Fields Must:
 1. Use `border-white/20` default

@@ -26,6 +26,7 @@ export default function Widget({
         shadow-lg
         hover:shadow-xl
         hover:border-white/50
+        hover:-translate-y-[1px]
         transition-all duration-300
         relative
         h-full
