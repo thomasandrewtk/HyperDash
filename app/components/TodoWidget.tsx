@@ -224,8 +224,8 @@ export default function TodoWidget() {
         <div className="flex-1 overflow-y-auto min-h-0 pr-1 auto-hide-scrollbar">
           <div className="space-y-2">
             {todos.length === 0 ? (
-              <p className="text-sm" style={{ color: colors.secondary }}>
-                No todos yet. Add one above!
+              <p className="text-sm font-mono opacity-60" style={{ color: colors.secondary }}>
+                Your tasks will appear here
               </p>
             ) : (
               getDisplayTodos().map((todo) => (

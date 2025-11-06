@@ -436,7 +436,7 @@ export default function NotepadWidget() {
               color: colors.primary,
               boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.3)',
             }}
-            data-placeholder="Type your notes here..."
+            data-placeholder="Start typing or paste an image..."
           />
 
           {/* Image Controls Overlay */}
