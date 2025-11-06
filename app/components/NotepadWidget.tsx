@@ -6,6 +6,18 @@ import { getFromLocalStorage, saveToLocalStorage } from '@/app/lib/utils';
 import { useReactiveColors } from './ColorContext';
 
 const STORAGE_KEY = 'hyperdash-notepad';
+const MAX_TABS = 20;
+
+interface NotepadTab {
+  id: string;
+  name: string;
+  content: string;
+}
+
+interface NotepadData {
+  tabs: NotepadTab[];
+  activeTabId: string;
+}
 
 interface ImageResizeState {
   img: HTMLImageElement;
@@ -22,22 +34,367 @@ interface ImageControl {
 }
 
 export default function NotepadWidget() {
-  const [content, setContent] = useState('');
+  const [tabs, setTabs] = useState<NotepadTab[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [editingTabId, setEditingTabId] = useState<string | null>(null);
+  const [editingTabName, setEditingTabName] = useState('');
+  const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
+  const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
+  const [hasOverflow, setHasOverflow] = useState(false);
   const [isResizing, setIsResizing] = useState<ImageResizeState | null>(null);
   const [hoveredImage, setHoveredImage] = useState<ImageControl | null>(null);
   const [imageControls, setImageControls] = useState<ImageControl[]>([]);
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
+  const tabNameInputRef = useRef<HTMLInputElement>(null);
+  const tabContainerRef = useRef<HTMLDivElement>(null);
+  const tabsListRef = useRef<HTMLDivElement>(null);
+  const activeTabRef = useRef<HTMLDivElement>(null);
+  const isSwitchingTabRef = useRef(false);
   const { colors } = useReactiveColors();
 
+  // Initialize tabs from storage or create default tab
   useEffect(() => {
     const saved = getFromLocalStorage(STORAGE_KEY);
-    if (saved && editorRef.current) {
-      editorRef.current.innerHTML = saved;
-      setContent(saved);
+    if (saved) {
+      try {
+        const data: NotepadData = JSON.parse(saved);
+        if (data.tabs && data.tabs.length > 0) {
+          setTabs(data.tabs);
+          setActiveTabId(data.activeTabId || data.tabs[0].id);
+          isSwitchingTabRef.current = true;
+        } else {
+          // Migrate old single notepad format
+          const oldContent = saved;
+          const defaultTab: NotepadTab = {
+            id: Date.now().toString(),
+            name: 'Notepad 1',
+            content: oldContent,
+          };
+          setTabs([defaultTab]);
+          setActiveTabId(defaultTab.id);
+          isSwitchingTabRef.current = true;
+        }
+      } catch (error) {
+        // If parsing fails, treat as old format
+        const defaultTab: NotepadTab = {
+          id: Date.now().toString(),
+          name: 'Notepad 1',
+          content: saved,
+        };
+        setTabs([defaultTab]);
+        setActiveTabId(defaultTab.id);
+        isSwitchingTabRef.current = true;
+      }
+    } else {
+      // No saved data, create default tab
+      const defaultTab: NotepadTab = {
+        id: Date.now().toString(),
+        name: 'Notepad 1',
+        content: '',
+      };
+      setTabs([defaultTab]);
+      setActiveTabId(defaultTab.id);
+      isSwitchingTabRef.current = true;
     }
   }, []);
+
+  // Load active tab content into editor when switching tabs
+  useEffect(() => {
+    if (activeTabId && editorRef.current && tabs.length > 0 && isSwitchingTabRef.current) {
+      const activeTab = tabs.find(tab => tab.id === activeTabId);
+      if (activeTab) {
+        editorRef.current.innerHTML = activeTab.content;
+        setContent(activeTab.content);
+        isSwitchingTabRef.current = false;
+      }
+    }
+    
+    // Scroll active tab into view if it's not visible
+    if (activeTabRef.current && tabContainerRef.current) {
+      activeTabRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
+  }, [activeTabId, tabs]);
+
+  // Save tabs to storage whenever they change
+  useEffect(() => {
+    if (tabs.length > 0 && activeTabId) {
+      const data: NotepadData = {
+        tabs,
+        activeTabId,
+      };
+      saveToLocalStorage(STORAGE_KEY, JSON.stringify(data));
+    }
+  }, [tabs, activeTabId]);
+
+  const activeTab = tabs.find(tab => tab.id === activeTabId);
+  const [content, setContent] = useState('');
+
+  // Check for tab overflow
+  useEffect(() => {
+    const checkOverflow = () => {
+      if (tabsListRef.current && tabContainerRef.current) {
+        const listWidth = tabsListRef.current.scrollWidth;
+        const containerWidth = tabContainerRef.current.clientWidth;
+        setHasOverflow(listWidth > containerWidth);
+      }
+    };
+    
+    // Check after a short delay to ensure DOM is updated
+    const timeoutId = setTimeout(checkOverflow, 0);
+    window.addEventListener('resize', checkOverflow);
+    
+    // Also check on scroll to handle dynamic overflow
+    const handleScroll = () => {
+      if (tabContainerRef.current) {
+        const { scrollLeft, scrollWidth, clientWidth } = tabContainerRef.current;
+        setHasOverflow(scrollWidth > clientWidth);
+      }
+    };
+    
+    if (tabContainerRef.current) {
+      tabContainerRef.current.addEventListener('scroll', handleScroll);
+    }
+    
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('resize', checkOverflow);
+      if (tabContainerRef.current) {
+        tabContainerRef.current.removeEventListener('scroll', handleScroll);
+      }
+    };
+  }, [tabs]);
+
+  // Tab management functions
+  const createTab = () => {
+    setTabs(prevTabs => {
+      // Check tab limit
+      if (prevTabs.length >= MAX_TABS) {
+        return prevTabs;
+      }
+      
+      // Save current tab content before creating new tab
+      if (activeTabId && editorRef.current) {
+        const currentContent = editorRef.current.innerHTML;
+        const updatedTabs = prevTabs.map(tab =>
+          tab.id === activeTabId ? { ...tab, content: currentContent } : tab
+        );
+        const newTab: NotepadTab = {
+          id: Date.now().toString(),
+          name: `Notepad ${prevTabs.length + 1}`,
+          content: '',
+        };
+        isSwitchingTabRef.current = true;
+        setActiveTabId(newTab.id);
+        return [...updatedTabs, newTab];
+      }
+      
+      const newTab: NotepadTab = {
+        id: Date.now().toString(),
+        name: `Notepad ${prevTabs.length + 1}`,
+        content: '',
+      };
+      isSwitchingTabRef.current = true;
+      setActiveTabId(newTab.id);
+      return [...prevTabs, newTab];
+    });
+  };
+
+  const switchTab = (tabId: string) => {
+    if (tabId === activeTabId) return;
+    
+    // Save current tab content before switching
+    if (activeTabId && editorRef.current) {
+      const currentContent = editorRef.current.innerHTML;
+      setTabs(prevTabs => prevTabs.map(tab =>
+        tab.id === activeTabId ? { ...tab, content: currentContent } : tab
+      ));
+    }
+    isSwitchingTabRef.current = true;
+    setActiveTabId(tabId);
+    setEditingTabId(null);
+  };
+
+  const deleteTab = (tabId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    // Save current tab content before deleting if it's the active tab
+    if (activeTabId === tabId && editorRef.current) {
+      const currentContent = editorRef.current.innerHTML;
+      setTabs(prevTabs => prevTabs.map(tab =>
+        tab.id === activeTabId ? { ...tab, content: currentContent } : tab
+      ));
+    }
+    
+    setTabs(prevTabs => {
+      if (prevTabs.length === 1) {
+        // Can't delete the last tab, just clear its content
+        if (editorRef.current) {
+          editorRef.current.innerHTML = '';
+          setContent('');
+          return [{ ...prevTabs[0], content: '' }];
+        }
+        return prevTabs;
+      }
+      
+      const newTabs = prevTabs.filter(tab => tab.id !== tabId);
+      
+      // Switch to another tab if deleting active tab
+      if (activeTabId === tabId) {
+        const index = prevTabs.findIndex(tab => tab.id === tabId);
+        const newActiveIndex = index > 0 ? index - 1 : 0;
+        isSwitchingTabRef.current = true;
+        setActiveTabId(newTabs[newActiveIndex].id);
+      }
+      
+      return newTabs;
+    });
+  };
+
+  const startRenameTab = (tabId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTabs(prevTabs => {
+      const tab = prevTabs.find(t => t.id === tabId);
+      if (tab) {
+        setEditingTabId(tabId);
+        setEditingTabName(tab.name);
+        // Use requestAnimationFrame for more reliable focus
+        requestAnimationFrame(() => {
+          tabNameInputRef.current?.focus();
+          tabNameInputRef.current?.select();
+        });
+      }
+      return prevTabs;
+    });
+  };
+
+  const saveRenameTab = (tabId: string) => {
+    if (editingTabName.trim()) {
+      setTabs(prevTabs => prevTabs.map(tab =>
+        tab.id === tabId ? { ...tab, name: editingTabName.trim() } : tab
+      ));
+    }
+    setEditingTabId(null);
+    setEditingTabName('');
+  };
+
+  const cancelRenameTab = () => {
+    setEditingTabId(null);
+    setEditingTabName('');
+  };
+
+  // Drag and drop handlers for tab reordering
+  const handleTabDragStart = (e: React.DragEvent, tabId: string) => {
+    // Prevent dragging if this tab is being edited
+    if (editingTabId === tabId) {
+      e.preventDefault();
+      return;
+    }
+    setDraggedTabId(tabId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', '');
+    
+    // Hide the default drag ghost image
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.clearRect(0, 0, 1, 1);
+      e.dataTransfer.setDragImage(canvas, 0, 0);
+    }
+  };
+
+  const handleTabDragOver = (e: React.DragEvent, targetTabId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedTabId && draggedTabId !== targetTabId) {
+      setDragOverTabId(targetTabId);
+    }
+  };
+
+  const handleTabDragLeave = () => {
+    // Don't clear immediately - let dragOver handle updates
+  };
+
+  const handleTabDrop = (e: React.DragEvent, targetTabId: string) => {
+    e.preventDefault();
+    if (!draggedTabId) {
+      setDraggedTabId(null);
+      setDragOverTabId(null);
+      return;
+    }
+
+    const finalTargetId = dragOverTabId || targetTabId;
+    
+    if (draggedTabId === finalTargetId) {
+      setDraggedTabId(null);
+      setDragOverTabId(null);
+      return;
+    }
+
+    setTabs(prevTabs => {
+      const draggedIndex = prevTabs.findIndex(tab => tab.id === draggedTabId);
+      const targetIndex = prevTabs.findIndex(tab => tab.id === finalTargetId);
+
+      if (draggedIndex === -1 || targetIndex === -1) {
+        return prevTabs;
+      }
+
+      const newTabs = [...prevTabs];
+      const [removed] = newTabs.splice(draggedIndex, 1);
+      newTabs.splice(targetIndex, 0, removed);
+
+      return newTabs;
+    });
+    
+    setDraggedTabId(null);
+    setDragOverTabId(null);
+  };
+
+  const handleTabDragEnd = () => {
+    // If we ended drag without dropping, make sure to apply the visual order
+    if (draggedTabId && dragOverTabId && draggedTabId !== dragOverTabId) {
+      setTabs(prevTabs => {
+        const draggedIndex = prevTabs.findIndex(tab => tab.id === draggedTabId);
+        const targetIndex = prevTabs.findIndex(tab => tab.id === dragOverTabId);
+
+        if (draggedIndex === -1 || targetIndex === -1) {
+          return prevTabs;
+        }
+
+        const newTabs = [...prevTabs];
+        const [removed] = newTabs.splice(draggedIndex, 1);
+        newTabs.splice(targetIndex, 0, removed);
+
+        return newTabs;
+      });
+    }
+    
+    setDraggedTabId(null);
+    setDragOverTabId(null);
+  };
+
+  // Calculate visual order during drag
+  const getDisplayTabs = () => {
+    if (!draggedTabId || !dragOverTabId || draggedTabId === dragOverTabId) {
+      return tabs;
+    }
+
+    const draggedIndex = tabs.findIndex(tab => tab.id === draggedTabId);
+    const targetIndex = tabs.findIndex(tab => tab.id === dragOverTabId);
+
+    if (draggedIndex === -1 || targetIndex === -1) {
+      return tabs;
+    }
+
+    const newTabs = [...tabs];
+    const [removed] = newTabs.splice(draggedIndex, 1);
+    newTabs.splice(targetIndex, 0, removed);
+
+    return newTabs;
+  };
 
   // Update image controls positions
   const updateImageControls = useCallback(() => {
@@ -174,10 +531,13 @@ export default function NotepadWidget() {
   }, [hoveredImage]);
 
   const handleInput = () => {
-    if (editorRef.current) {
+    if (editorRef.current && activeTabId) {
       const newContent = editorRef.current.innerHTML;
       setContent(newContent);
-      saveToLocalStorage(STORAGE_KEY, newContent);
+      // Update the active tab's content using functional update
+      setTabs(prevTabs => prevTabs.map(tab =>
+        tab.id === activeTabId ? { ...tab, content: newContent } : tab
+      ));
       updateImageControls();
     }
   };
@@ -397,31 +757,257 @@ export default function NotepadWidget() {
     }
   }, [isResizing, handleMouseMove, handleMouseUp]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle shortcuts when editor is focused or widget is active
+      if (!editorRef.current?.contains(document.activeElement) && 
+          !tabContainerRef.current?.contains(document.activeElement)) {
+        return;
+      }
+      
+      // Ctrl+T or Cmd+T: New tab
+      if ((e.ctrlKey || e.metaKey) && e.key === 't') {
+        e.preventDefault();
+        // Save current tab content before creating new tab
+        if (activeTabId && editorRef.current) {
+          setTabs(prevTabs => {
+            // Check tab limit
+            if (prevTabs.length >= MAX_TABS) {
+              return prevTabs;
+            }
+            
+            const currentContent = editorRef.current!.innerHTML;
+            const updatedTabs = prevTabs.map(tab =>
+              tab.id === activeTabId ? { ...tab, content: currentContent } : tab
+            );
+            const newTab: NotepadTab = {
+              id: Date.now().toString(),
+              name: `Notepad ${prevTabs.length + 1}`,
+              content: '',
+            };
+            isSwitchingTabRef.current = true;
+            setActiveTabId(newTab.id);
+            return [...updatedTabs, newTab];
+          });
+        } else {
+          setTabs(prevTabs => {
+            // Check tab limit
+            if (prevTabs.length >= MAX_TABS) {
+              return prevTabs;
+            }
+            
+            const newTab: NotepadTab = {
+              id: Date.now().toString(),
+              name: `Notepad ${prevTabs.length + 1}`,
+              content: '',
+            };
+            isSwitchingTabRef.current = true;
+            setActiveTabId(newTab.id);
+            return [...prevTabs, newTab];
+          });
+        }
+        return;
+      }
+      
+      // Ctrl+W or Cmd+W: Close active tab
+      if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+        e.preventDefault();
+        if (activeTabId) {
+          setTabs(prevTabs => {
+            if (prevTabs.length === 1) {
+              // Can't delete the last tab, just clear its content
+              if (editorRef.current) {
+                editorRef.current.innerHTML = '';
+                setContent('');
+                return [{ ...prevTabs[0], content: '' }];
+              }
+              return prevTabs;
+            }
+            
+            // Save current tab content before deleting if it's the active tab
+            if (editorRef.current) {
+              const currentContent = editorRef.current.innerHTML;
+              const updatedTabs = prevTabs.map(tab =>
+                tab.id === activeTabId ? { ...tab, content: currentContent } : tab
+              );
+              const newTabs = updatedTabs.filter(tab => tab.id !== activeTabId);
+              
+              // Switch to another tab if deleting active tab
+              const index = prevTabs.findIndex(tab => tab.id === activeTabId);
+              const newActiveIndex = index > 0 ? index - 1 : 0;
+              isSwitchingTabRef.current = true;
+              setActiveTabId(newTabs[newActiveIndex].id);
+              
+              return newTabs;
+            }
+            return prevTabs;
+          });
+        }
+        return;
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTabId]);
+
   return (
     <Widget title="Notepad">
       <div className="flex flex-col h-full min-h-0 gap-2 relative">
-        {/* Toolbar */}
-        <div className="flex-shrink-0 flex gap-2">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileSelect}
-            className="hidden"
-            id="notepad-image-input"
-          />
-          <label
-            htmlFor="notepad-image-input"
-            className="bg-white/10 border border-white/30 rounded-sm px-3 py-1.5 text-sm font-mono cursor-pointer hover:bg-white/15 hover:border-white/50 transition-all duration-200"
-            style={{ color: colors.button }}
-            onMouseDown={(e) => {
-              // Prevent label from taking focus, but still allow file dialog to open
-              e.preventDefault();
-              fileInputRef.current?.click();
-            }}
+        {/* Chrome-style Tabs */}
+        <div 
+          ref={tabContainerRef}
+          className="flex-shrink-0 flex items-end gap-0.5 overflow-x-auto overflow-y-hidden pb-0 relative"
+        >
+          {/* Overflow indicator - left */}
+          {hasOverflow && (
+            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-black/60 to-transparent pointer-events-none z-20 flex items-center">
+              <div className="w-0 h-0 border-t-[4px] border-t-transparent border-b-[4px] border-b-transparent border-r-[6px] border-r-white/30 ml-1" />
+            </div>
+          )}
+          
+          {/* Tabs Container */}
+          <div 
+            ref={tabsListRef}
+            className="flex-1 flex items-end gap-0.5 min-w-0"
           >
-            Add Image
-          </label>
+            {getDisplayTabs().map((tab, index) => (
+              <div
+                key={tab.id}
+                ref={activeTabId === tab.id ? activeTabRef : null}
+                data-tab-id={tab.id}
+                draggable={editingTabId !== tab.id}
+                onDragStart={(e) => handleTabDragStart(e, tab.id)}
+                onDragOver={(e) => handleTabDragOver(e, tab.id)}
+                onDragLeave={handleTabDragLeave}
+                onDrop={(e) => handleTabDrop(e, tab.id)}
+                onDragEnd={handleTabDragEnd}
+                onClick={() => switchTab(tab.id)}
+                className={`
+                  group relative flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono
+                  transition-all duration-200 min-w-[80px] max-w-[200px]
+                  ${editingTabId === tab.id ? 'cursor-default' : 'cursor-move'}
+                  ${activeTabId === tab.id
+                    ? 'bg-black/60 border-t border-l border-r border-white/30 rounded-t-sm z-10'
+                    : 'bg-black/30 border-t border-l border-r border-white/10 rounded-t-sm hover:bg-black/40 hover:border-white/20'
+                  }
+                  ${draggedTabId === tab.id 
+                    ? 'opacity-50 border-white/50 shadow-lg' 
+                    : ''
+                  }
+                  ${dragOverTabId === tab.id && draggedTabId !== tab.id
+                    ? 'border-white/40 bg-black/50'
+                    : ''
+                  }
+                `}
+                style={{
+                  color: activeTabId === tab.id ? colors.primary : colors.secondary,
+                }}
+              >
+                {/* Tab Name */}
+                {editingTabId === tab.id ? (
+                  <input
+                    ref={tabNameInputRef}
+                    type="text"
+                    value={editingTabName}
+                    onChange={(e) => setEditingTabName(e.target.value)}
+                    onBlur={() => saveRenameTab(tab.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        saveRenameTab(tab.id);
+                      } else if (e.key === 'Escape') {
+                        cancelRenameTab();
+                      }
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex-1 bg-black/40 border border-white/30 rounded px-1.5 py-0.5 text-xs font-mono focus:outline-none focus:border-white/50"
+                    style={{ color: colors.primary }}
+                  />
+                ) : (
+                  <>
+                    <span
+                      className="flex-1 truncate select-none"
+                      onDoubleClick={(e) => startRenameTab(tab.id, e)}
+                    >
+                      {tab.name}
+                    </span>
+                    {/* Delete Button */}
+                    <button
+                      onClick={(e) => deleteTab(tab.id, e)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 w-4 h-4 flex items-center justify-center rounded hover:bg-white/20 text-xs"
+                      style={{ color: colors.button }}
+                      title="Close tab"
+                    >
+                      ×
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Overflow indicator - right */}
+          {hasOverflow && (
+            <div className="absolute right-[60px] top-0 bottom-0 w-8 bg-gradient-to-l from-black/60 to-transparent pointer-events-none z-20 flex items-center justify-end">
+              <div className="w-0 h-0 border-t-[4px] border-t-transparent border-b-[4px] border-b-transparent border-l-[6px] border-l-white/30 mr-1" />
+            </div>
+          )}
+
+          {/* New Tab Button */}
+          <button
+            onClick={createTab}
+            disabled={tabs.length >= MAX_TABS}
+            className={`
+              flex-shrink-0 w-6 h-6 flex items-center justify-center bg-black/30 border border-white/10 rounded-sm 
+              transition-all duration-200 text-xs font-mono
+              ${tabs.length >= MAX_TABS 
+                ? 'opacity-50 cursor-not-allowed' 
+                : 'hover:bg-black/40 hover:border-white/20 cursor-pointer'
+              }
+            `}
+            style={{ color: colors.button }}
+            title={tabs.length >= MAX_TABS ? `Maximum ${MAX_TABS} tabs reached` : 'New tab'}
+          >
+            +
+          </button>
+
+          {/* Add Image Button (Symbol) */}
+          <div className="flex-shrink-0">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileSelect}
+              className="hidden"
+              id="notepad-image-input"
+            />
+            <label
+              htmlFor="notepad-image-input"
+              className="flex items-center justify-center w-6 h-6 bg-black/30 border border-white/10 rounded-sm cursor-pointer hover:bg-black/40 hover:border-white/20 transition-all duration-200"
+              style={{ color: colors.button }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                fileInputRef.current?.click();
+              }}
+              title="Add image"
+            >
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+            </label>
+          </div>
         </div>
 
         {/* Editor Container */}
