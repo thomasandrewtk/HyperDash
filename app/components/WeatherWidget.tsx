@@ -65,7 +65,7 @@ const getWeatherCondition = (code: number): string => {
   return conditions[code] || 'Unknown';
 };
 
-export default function WeatherWidget() {
+export default function WeatherWidget({ onLoadComplete }: { onLoadComplete?: () => void }) {
   const { colors } = useReactiveColors();
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -171,6 +171,10 @@ export default function WeatherWidget() {
         });
       } finally {
         setLoading(false);
+        // Notify parent that weather loading is complete
+        if (onLoadComplete) {
+          onLoadComplete();
+        }
       }
     };
 

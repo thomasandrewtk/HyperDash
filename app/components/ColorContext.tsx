@@ -6,6 +6,7 @@ import { getFromLocalStorage, saveToLocalStorage, removeFromLocalStorage } from 
 
 interface ColorContextType {
   colors: ColorPalette;
+  isReady: boolean;
   updateColorsFromWallpaper: (imageSrc: string) => Promise<void>;
   resetToDefault: () => void;
 }
@@ -14,6 +15,7 @@ const ColorContext = createContext<ColorContextType | undefined>(undefined);
 
 export function ColorProvider({ children }: { children: ReactNode }) {
   const [colors, setColors] = useState<ColorPalette>(getDefaultPalette());
+  const [isReady, setIsReady] = useState(false);
 
   const updateColorsFromWallpaper = useCallback(async (imageSrc: string) => {
     try {
@@ -37,21 +39,32 @@ export function ColorProvider({ children }: { children: ReactNode }) {
 
   // Load saved colors from localStorage on mount, then analyze wallpaper if available
   useEffect(() => {
-    const savedColors = getFromLocalStorage('reactiveColors');
-    if (savedColors) {
-      try {
-        const parsed = JSON.parse(savedColors);
-        setColors(parsed);
-      } catch (error) {
-        console.error('Error parsing saved colors:', error);
+    const initializeColors = async () => {
+      const savedColors = getFromLocalStorage('reactiveColors');
+      if (savedColors) {
+        try {
+          const parsed = JSON.parse(savedColors);
+          setColors(parsed);
+        } catch (error) {
+          console.error('Error parsing saved colors:', error);
+        }
       }
-    }
-    
-    // After loading saved colors, check if wallpaper needs analysis
-    const savedWallpaper = getFromLocalStorage('wallpaper');
-    if (savedWallpaper) {
-      updateColorsFromWallpaper(savedWallpaper).catch(console.error);
-    }
+      
+      // After loading saved colors, check if wallpaper needs analysis
+      const savedWallpaper = getFromLocalStorage('wallpaper');
+      if (savedWallpaper) {
+        try {
+          await updateColorsFromWallpaper(savedWallpaper);
+        } catch (error) {
+          console.error('Error analyzing wallpaper:', error);
+        }
+      }
+      
+      // Mark as ready after initialization
+      setIsReady(true);
+    };
+
+    initializeColors();
   }, [updateColorsFromWallpaper]);
 
   // Listen for wallpaper changes
@@ -87,7 +100,7 @@ export function ColorProvider({ children }: { children: ReactNode }) {
   }, [colors]);
 
   return (
-    <ColorContext.Provider value={{ colors, updateColorsFromWallpaper, resetToDefault }}>
+    <ColorContext.Provider value={{ colors, isReady, updateColorsFromWallpaper, resetToDefault }}>
       {children}
     </ColorContext.Provider>
   );
