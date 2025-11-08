@@ -56,7 +56,7 @@ export default function WidgetContainer({
         id={`widget-${position}`}
         data-widget-position={position}
         data-focused={isFocused}
-        className="h-full"
+        className="h-full min-h-0"
         onMouseEnter={handleMouseEnter}
       />
     );
@@ -68,7 +68,7 @@ export default function WidgetContainer({
       id={`widget-${position}`}
       data-widget-position={position}
       data-focused={isFocused}
-      className="h-full"
+      className="h-full min-h-0"
       onMouseEnter={handleMouseEnter}
     >
       <Suspense

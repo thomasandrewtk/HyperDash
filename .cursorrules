@@ -64,7 +64,7 @@ Reactive personal dashboard webapp. Built with Next.js 15, TypeScript, Tailwind 
 ### Three-Layer System
 
 1. **Dashboard** (`app/components/Dashboard.tsx`): Manages widget configuration, layout slots, widget props via `getWidgetProps()`
-2. **WidgetContainer** (`app/components/WidgetContainer.tsx`): Lazy loads widgets, handles empty slots, passes focus props
+2. **WidgetContainer** (`app/components/WidgetContainer.tsx`): Lazy loads widgets, handles empty slots, passes focus props. **Always give each slot wrapper `className="h-full min-h-0"` so child widgets use their own scrollbars instead of stretching the layout.**
 3. **Widget** (`app/components/[WidgetName]Widget.tsx`): Individual components using base `Widget` component
 
 ### Widget Registry (`app/lib/widgetRegistry.ts`)
