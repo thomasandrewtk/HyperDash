@@ -37,6 +37,7 @@ Your reactive personal dashboard. Built with Next.js, TypeScript, and Tailwind C
   - Clock format (12h/24h) preferences
   - Data export/import functionality
   - Clear all data option
+- **Keyboard Shortcuts**: Global shortcuts for quick access to common actions
 
 ## Getting Started
 
@@ -135,6 +136,25 @@ All data is stored in browser localStorage and persists across sessions:
 - **Preferences**: Clock format (12h/24h) and other settings
 
 You can export/import all data through the Settings modal in the System Info widget.
+
+## Keyboard Shortcuts
+
+HyperDash includes global keyboard shortcuts for quick access to common actions:
+
+### Global Shortcuts
+
+- **`S`** - Open Settings Modal
+- **`Esc`** - Close Any Modal + Defocus Text Editing
+- **`Shift + W`** - Wallpaper Upload (opens file picker)
+- **`Shift + C`** - Toggle Clock Format (12h ↔ 24h)
+- **`Shift + E`** - Export Data
+- **`Shift + I`** - Import Data
+
+### Notes
+
+- Shortcuts are **disabled when editing text** (typing in inputs, textareas, or contenteditable elements) to prevent accidental triggers
+- **`Esc` always works** even when editing text, allowing you to quickly defocus and close modals
+- All shortcuts work globally across the dashboard, regardless of which widget is visible
 
 ## License
 

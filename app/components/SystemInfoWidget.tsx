@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Widget from './Widget';
 import { getFromLocalStorage, saveToLocalStorage, removeFromLocalStorage } from '@/app/lib/utils';
 import { useReactiveColors } from './ColorContext';
@@ -22,6 +22,7 @@ export default function SystemInfoWidget() {
     return (saved === '24h' ? '24h' : '12h') as '12h' | '24h';
   });
   const { colors } = useReactiveColors();
+  const wallpaperInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const updateInfo = () => {
@@ -93,6 +94,59 @@ export default function SystemInfoWidget() {
       setWallpaperPreview(savedWallpaper);
     }
   }, []);
+
+  // Listen for keyboard shortcut events
+  useEffect(() => {
+    const handleOpenSettings = () => {
+      setIsSettingsOpen(true);
+    };
+
+    const handleCloseModals = () => {
+      setIsSettingsOpen(false);
+      // Defocus any active text editing element
+      if (document.activeElement instanceof HTMLElement) {
+        document.activeElement.blur();
+      }
+    };
+
+    const handleOpenWallpaperUpload = () => {
+      if (wallpaperInputRef.current) {
+        wallpaperInputRef.current.click();
+      }
+    };
+
+    const handleToggleClockFormat = () => {
+      const newFormat = clockFormat === '12h' ? '24h' : '12h';
+      setClockFormat(newFormat);
+      saveToLocalStorage('clockFormat', newFormat);
+      // Trigger event for clock widget to update
+      window.dispatchEvent(new CustomEvent('clockFormatChanged', { detail: newFormat }));
+    };
+
+    const handleExportDataEvent = () => {
+      handleExportData();
+    };
+
+    const handleImportDataEvent = () => {
+      handleImportData();
+    };
+
+    window.addEventListener('openSettings', handleOpenSettings);
+    window.addEventListener('closeModals', handleCloseModals);
+    window.addEventListener('openWallpaperUpload', handleOpenWallpaperUpload);
+    window.addEventListener('toggleClockFormat', handleToggleClockFormat);
+    window.addEventListener('exportData', handleExportDataEvent);
+    window.addEventListener('importData', handleImportDataEvent);
+
+    return () => {
+      window.removeEventListener('openSettings', handleOpenSettings);
+      window.removeEventListener('closeModals', handleCloseModals);
+      window.removeEventListener('openWallpaperUpload', handleOpenWallpaperUpload);
+      window.removeEventListener('toggleClockFormat', handleToggleClockFormat);
+      window.removeEventListener('exportData', handleExportDataEvent);
+      window.removeEventListener('importData', handleImportDataEvent);
+    };
+  }, [clockFormat]);
 
   const handleWallpaperUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -212,6 +266,15 @@ export default function SystemInfoWidget() {
 
   return (
     <>
+      {/* Hidden file input - always rendered so keyboard shortcut can access it */}
+      <input
+        ref={wallpaperInputRef}
+        id="wallpaper-upload"
+        type="file"
+        accept="image/*"
+        onChange={handleWallpaperUpload}
+        className="hidden"
+      />
       <Widget title="System Info">
         <div className="flex-1 flex flex-col">
           <div className="space-y-2 text-xs flex-1">
@@ -407,13 +470,6 @@ export default function SystemInfoWidget() {
                   >
                     Upload Image
                   </label>
-                  <input
-                    id="wallpaper-upload"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleWallpaperUpload}
-                    className="hidden"
-                  />
                 </div>
                 
                 {wallpaperPreview && (

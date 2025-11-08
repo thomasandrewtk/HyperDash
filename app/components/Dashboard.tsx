@@ -12,8 +12,11 @@ import {
   WidgetSlot,
 } from '@/app/lib/widgetConfig';
 import { WidgetType } from '@/app/lib/widgetRegistry';
+import { useKeyboardShortcuts } from '@/app/lib/useKeyboardShortcuts';
 
 function DashboardContent() {
+  // Initialize global keyboard shortcuts
+  useKeyboardShortcuts();
   const { isReady: colorsReady } = useReactiveColors();
   const [wallpaper, setWallpaper] = useState<string | null>(null);
   const [wallpaperReady, setWallpaperReady] = useState(false);
