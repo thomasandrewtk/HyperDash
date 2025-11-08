@@ -30,12 +30,17 @@ Your reactive personal dashboard. Built with Next.js, TypeScript, and Tailwind C
     - 6-hour hourly forecast
     - Location-based (requires geolocation permission)
   - **Todo List**: Add, complete, remove, and drag-and-drop reorder todos with persistent storage
+    - Keyboard shortcuts for efficient todo management (see Keyboard Shortcuts section)
+    - New todos are added to the top of the list
+    - Smart focus navigation between input and todo items
   - **Notepad**: Multi-tab text editor with auto-save to localStorage
-    - Create multiple notepad tabs (up to 20)
+    - Create multiple notepad tabs (up to 9)
     - Drag-and-drop tab reordering
     - Image support: Paste or upload images to create clickable links (e.g., `[Image #1]`) that open in a new tab
-    - Images are not stored in localStorage (only link references), preventing quota issues
+    - URL support: Paste URLs to automatically convert them to shortened hyperlinks (e.g., `[youtube.com]`) that open in a new tab
+    - Images and URLs are not stored in localStorage (only link references), preventing quota issues
     - Per-tab image numbering that automatically renumbers when images are added or removed
+    - Keyboard shortcuts for tab management and navigation (see Keyboard Shortcuts section)
   - **System Info**: Browser info, screen size, storage usage, and session uptime
 - **Settings & Customization**:
   - Wallpaper upload and management
@@ -151,7 +156,7 @@ You can export/import all data through the Settings modal in the System Info wid
 
 ## Keyboard Shortcuts
 
-HyperDash includes global keyboard shortcuts for quick access to common actions:
+HyperDash includes global keyboard shortcuts for quick access to common actions, plus widget-specific shortcuts for efficient interaction.
 
 ### Global Shortcuts
 
@@ -171,23 +176,71 @@ HyperDash features a **Hyprland-inspired focus system** for keyboard-driven widg
 - **`Shift + Tab`** - Cycle focus backward (right-to-left, bottom-to-top, wraps around)
 
 **Focus Behavior:**
-- **Dual Control**: Both keyboard and mouse hover can control focus
-- **Smart Precedence**: When you use keyboard navigation, mouse hover is temporarily disabled (2-second timeout)
-- **Visual Feedback**: Focused widgets are highlighted with enhanced border, shadow, and slight upward lift
-- **Natural Recovery**: After 2 seconds of no keyboard input, mouse hover control automatically resumes
+- **Click-Based Focus**: Focus is established by clicking on widgets, not hovering
+- **Visual Feedback**: Focused widgets are highlighted with enhanced border, shadow, and slight upward lift (only when focused)
+- **Fast Transitions**: Visual focus changes happen instantly (150ms transition)
 - **Empty Slot Skipping**: Tab cycling automatically skips empty widget slots
 - **No Persistence**: Focus state resets on page reload
 
 **Example Workflow:**
-1. Press `1` to focus Clock widget → keyboard takes control, mouse hover disabled
-2. Press `Tab` to cycle to Weather widget → still in keyboard mode
-3. Wait 2 seconds or move mouse → mouse hover control resumes
-4. Hover over Notepad widget → mouse takes control, widget highlights
+1. Press `1` to focus Clock widget → widget highlights instantly
+2. Press `Tab` to cycle to Weather widget → focus moves smoothly
+3. Click on Notepad widget → focus changes to Notepad
+4. Press `Tab` again → cycles to next widget
+
+### Widget-Specific Shortcuts
+
+Widget shortcuts are **only active when the widget is focused** and **disabled when editing text** (typing in inputs, textareas, or contenteditable elements).
+
+#### Clock Widget (When Focused)
+
+- **`Space`** - Start/Pause Pomodoro Timer
+- **`R`** - Reset Pomodoro Timer
+- **`K`** - Skip Pomodoro Session
+
+#### Todo Widget (When Focused)
+
+- **`N`** - Focus New Todo Input
+- **`C`** - Show/Hide Completed Todos
+- **`X`** - Clear All Completed Todos (confirmation dialog)
+- **`Arrow Down`** - Select Next Todo
+- **`Arrow Up`** - Select Previous Todo
+- **`Enter`** - Edit Selected Todo (or focus input if none selected)
+- **`Space`** - Toggle Todo Completion (moves focus to next incomplete todo)
+- **`Backspace`** - Delete Selected Todo (confirmation dialog)
+- **`Escape`** - Close dialogs and clear selection
+- **`Arrow Down`** (from input) - Move to first todo
+- **`Arrow Up`** (from first todo) - Move to input field
+
+**Todo Navigation:**
+- New todos are added to the top of the list
+- When completing a todo, focus automatically moves to the next incomplete todo
+- If no incomplete todos remain after completion, focus moves to the input field
+- When completed todos are hidden and focus is on a completed todo, focus returns to input
+
+#### Notepad Widget (When Focused)
+
+- **`Enter`** - Start Editing (Focus editor)
+- **`Ctrl + T`** - New Tab
+- **`Ctrl + W`** - Close Active Tab
+- **`Ctrl + R`** - Rename Active Tab
+- **`Ctrl + I`** - Add Image (opens file picker)
+- **`Ctrl + Alt + Arrow Right`** - Cycle Tab Forward (macOS compatible)
+- **`Ctrl + Alt + Arrow Left`** - Cycle Tab Backward (macOS compatible)
+- **`Ctrl + 1-9`** - Switch to Tab by Number (1st tab, 2nd tab, etc.)
+
+**Notepad Features:**
+- Maximum 9 tabs per notepad
+- Paste URLs to automatically convert them to shortened hyperlinks (e.g., `[youtube.com]`)
+- Links open in new tabs when clicked
+- Tab creation/closure includes confirmation dialogs for safety
 
 ### Notes
 
 - Shortcuts are **disabled when editing text** (typing in inputs, textareas, or contenteditable elements) to prevent accidental triggers
 - **`Esc` always works** even when editing text, allowing you to quickly defocus and close modals
+- Widget shortcuts are **only active when the widget is focused**
+- Modifier keys (CMD/Ctrl/Alt) are ignored for single-key shortcuts to prevent browser conflicts
 - All shortcuts work globally across the dashboard, regardless of which widget is visible
 - Focus shortcuts respect the position-based layout system (positions 1-5 in current 3+2 layout)
 

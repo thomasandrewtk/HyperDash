@@ -91,33 +91,43 @@ Reactive personal dashboard webapp. Built with Next.js 15, TypeScript, Tailwind 
 
 All widgets use base `Widget` component:
 - Unified styling: `border-white/20`, `bg-black/40 backdrop-blur-xl`
-- Hover effects: `border-white/50`, `-translate-y-[1px]`, `shadow-xl`, `transition-all duration-300`
-- Focus styling: Same as hover (applied when `isFocused={true}`)
-- Conditional hover: Disabled when `keyboardControl` is true
+- Focus styling: `border-white/50`, `-translate-y-[1px]`, `shadow-xl` (only when `isFocused={true}`)
+- Transition: `transition-all duration-150` for fast visual feedback
+- No hover effects: Visual focus indicators only appear when widget has focus
+- Inner glow: Subtle inner glow effect when focused (`inset 0 0 20px rgba(255, 255, 255, 0.1)`)
 
 ## Focus System (Hyprland-Style)
 
-**Architecture**: Dual input control (keyboard + mouse) with keyboard precedence. Keyboard control expires after 2 seconds.
+**Architecture**: Click-based focus system. Focus is established by clicking on widgets, not hovering.
 
 **FocusContext** (`app/components/FocusContext.tsx`):
 - `focusedPosition: number | null` - Currently focused widget (1-5)
-- `keyboardControl: boolean` - True when keyboard active (2s timeout)
-- `setFocusedPositionFromKeyboard(position)` - Asserts keyboard control, disables mouse
-- `setFocusedPositionFromMouse(position)` - Only works if keyboard control inactive
+- `setFocusedPositionFromKeyboard(position)` - Sets focus from keyboard navigation
+- `setFocusedPositionFromMouse(position)` - Sets focus from mouse click
 
 **Keyboard Shortcuts** (`app/lib/useKeyboardShortcuts.ts`):
 - `1-9`: Direct focus to widget position (skips empty slots)
 - `Tab`: Cycle forward through widgets (wraps around)
 - `Shift+Tab`: Cycle backward (wraps around)
-- Disabled when editing text (inputs, textareas)
+- Disabled when editing text (inputs, textareas, contenteditable)
+
+**Widget-Specific Shortcuts** (`app/lib/useWidgetKeyboardShortcuts.ts`):
+- Reusable hook for widget-specific keyboard shortcuts
+- Only active when widget is focused (`isFocused={true}`)
+- Automatically disabled when editing text
+- Ignores modifier keys (CMD/Ctrl/Alt) to prevent browser conflicts
+- Shift is allowed for intentional shortcuts
 
 **Integration**:
 - Dashboard wraps with `<FocusProvider>`, passes `isFocused` to WidgetContainer
-- WidgetContainer handles `onMouseEnter` → `setFocusedPositionFromMouse()`
+- WidgetContainer handles `onMouseDown` → `setFocusedPositionFromMouse()` (click-based)
 - Widget components accept `isFocused?: boolean` prop, pass to base `Widget`
-- Base `Widget` applies focus styling and conditionally disables hover
+- Base `Widget` applies focus styling only when `isFocused={true}` (no hover effects)
+- Transition duration: `duration-150` for fast visual feedback
 
 **Adding Focus to New Widgets**: Accept `isFocused?: boolean` prop → pass to base `<Widget>` component. No additional logic needed.
+
+**Adding Widget Shortcuts**: Use `useWidgetKeyboardShortcuts(isFocused, shortcuts)` hook with a `shortcuts` object mapping key strings to handler functions.
 
 ## Widget Requirements
 
@@ -219,6 +229,15 @@ e.dataTransfer.setDragImage(canvas, 0, 0);
 - Links should behave like normal text (deletable, selectable)
 - Use `window.open()` in click handlers to open links in new tabs
 - Check for text selection before preventing default (allow normal editing)
+- Use class `notepad-image-link` for image links
+
+**URL Links in Notepad**:
+- When pasting URLs, automatically convert to shortened hyperlinks
+- Display format: `[domain.com]` (e.g., `[youtube.com]`)
+- Use class `notepad-url-link` for URL links
+- Extract domain using `URL` API, remove `www.` prefix
+- Normalize URLs (add `https://` if missing)
+- Links open in new tabs when clicked
 
 **Renumbering Pattern**:
 - Track link count with refs to avoid unnecessary renumbering
@@ -234,12 +253,18 @@ const previousLinkCountRef = useRef(0);
 const handleInput = () => {
   if (isRenumberingRef.current) return;
   // ... save content ...
-  const links = editorRef.current.querySelectorAll('a.image-link');
+  const links = editorRef.current.querySelectorAll('a.notepad-image-link');
   if (links.length !== previousLinkCountRef.current) {
     requestAnimationFrame(() => renumberImageLinks(true));
   }
 };
 ```
+
+**Paste Handler Pattern**:
+- Check for images first (clipboardData.items)
+- Then check for URLs (isURL helper function)
+- Finally paste as plain text
+- Use `document.execCommand('insertText')` for plain text insertion
 
 ## File Structure
 
@@ -248,7 +273,7 @@ app/
   components/
     Widget.tsx          # Base widget component
     Dashboard.tsx       # Layout, widget config, focus management
-    WidgetContainer.tsx # Lazy loading, focus events
+    WidgetContainer.tsx # Lazy loading, focus events (click-based)
     ColorContext.tsx    # Reactive color provider
     FocusContext.tsx    # Global focus state
     [WidgetName]Widget.tsx
@@ -257,5 +282,52 @@ app/
     widgetConfig.ts        # Configuration, focus helpers
     colorUtils.ts          # Wallpaper analysis
     useKeyboardShortcuts.ts # Global shortcuts
+    useWidgetKeyboardShortcuts.ts # Widget-specific shortcuts hook
   globals.css              # Global styles, CSS custom properties
 ```
+
+## Widget-Specific Features
+
+### Todo Widget
+
+**Keyboard Shortcuts** (when focused, not editing):
+- `N` - Focus input, clear selection
+- `C` - Toggle show/hide completed todos
+- `X` - Clear all completed (confirmation dialog)
+- `Arrow Down/Up` - Navigate todos (wraps around)
+- `Enter` - Edit selected todo (or focus input if none selected)
+- `Space` - Toggle completion (moves to next incomplete todo)
+- `Backspace` - Delete selected todo (confirmation dialog)
+- `Escape` - Close dialogs, clear selection
+- `Arrow Down` from input - Move to first todo
+- `Arrow Up` from first todo - Move to input
+
+**Behavior**:
+- New todos added to top of list
+- Completing a todo moves focus to next incomplete todo (or input if none)
+- Hiding completed todos returns focus to input if selection is on completed todo
+- Confirmation dialogs support Enter (confirm) and Escape (cancel)
+
+### Notepad Widget
+
+**Keyboard Shortcuts** (when focused, not editing):
+- `Enter` - Focus editor
+- `Ctrl+T` - New tab
+- `Ctrl+W` - Close tab
+- `Ctrl+R` - Rename tab
+- `Ctrl+I` - Add image
+- `Ctrl+Alt+Arrow` - Cycle tabs (macOS compatible)
+- `Ctrl+1-9` - Switch to tab by number
+
+**Features**:
+- Maximum 9 tabs
+- Paste URLs to auto-convert to shortened links `[domain.com]`
+- Tab creation uses pending state to avoid race conditions
+- Image and URL links behave like normal text (selectable, deletable)
+
+### Clock Widget
+
+**Keyboard Shortcuts** (when focused):
+- `Space` - Start/Pause Pomodoro
+- `R` - Reset Pomodoro
+- `K` - Skip Pomodoro session
