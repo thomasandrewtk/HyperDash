@@ -42,7 +42,7 @@ const getNodePath = (node: Node, root: Node): number[] => {
   let current: Node | null = node;
 
   while (current && current !== root) {
-    const parent = current.parentNode;
+    const parent: Node | null = current.parentNode;
     if (!parent) {
       return [];
     }
