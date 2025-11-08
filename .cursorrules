@@ -5,690 +5,162 @@
 **After making any changes to the codebase, ALWAYS ask the user:**
 "Do you want me to update the .cursorrules file with any new patterns, conventions, or SOPs that were established?"
 
-This ensures the rules file stays current with evolving project standards and helps maintain consistency across the codebase.
-
 ## Project Overview
-A reactive personal dashboard webapp. Built with Next.js 15, TypeScript, Tailwind CSS, and React.
 
-## Color Scheme
+Reactive personal dashboard webapp. Built with Next.js 15, TypeScript, Tailwind CSS, and React.
+
+## Core Principles
+
+1. **Wallpaper Reactive**: Borders use white/neutral colors; text colors dynamically adjust based on wallpaper brightness
+2. **Consistency**: Unified color scheme across all widgets
+3. **Modern Aesthetic**: Monospace fonts, thin borders, semi-transparency, backdrop blur
+4. **Accessibility**: Good contrast ratios, automatically optimized per wallpaper
+
+## Styling System
 
 ### Reactive Color System
 
-**IMPORTANT**: Text colors are now dynamically reactive to the wallpaper background. The system analyzes wallpaper brightness and adjusts the green color palette accordingly for optimal contrast and readability.
+**CRITICAL**: Text colors dynamically adjust to wallpaper brightness. Use `useReactiveColors()` hook - NEVER hardcoded Tailwind green classes.
 
-**How it works:**
-- Wallpaper brightness is analyzed when a wallpaper is uploaded or changed
-- Color adjustments are calculated based on brightness:
-  - Dark wallpapers (brightness < 0.3): Increase text brightness by 20-30% for better contrast
-  - Medium wallpapers (0.3-0.7): Minimal adjustment
-  - Light wallpapers (brightness > 0.7): Decrease text brightness by 15-25% for better contrast
-- Colors are stored in React Context and persisted to localStorage
-- CSS custom properties are set for global access (especially for placeholders)
+**Color Palette** (via `useReactiveColors()` hook):
+- `colors.primary` - Main content text (green-300 equivalent, dynamically adjusted)
+- `colors.secondary` - Labels, headings (green-400 equivalent)
+- `colors.placeholder` - Input placeholders (green-500/80 equivalent, auto-styled via CSS)
+- `colors.muted` - Completed/strikethrough items (green-600 equivalent)
+- `colors.button` - Button labels (green-300 equivalent)
 
-**Color Palette Structure:**
-- **primary**: Main content text (equivalent to green-300, dynamically adjusted)
-- **secondary**: Labels, headings, secondary information (equivalent to green-400, dynamically adjusted)
-- **placeholder**: Input placeholders (equivalent to green-500/80, dynamically adjusted)
-- **muted**: Completed/strikethrough items (equivalent to green-600, dynamically adjusted)
-- **button**: Button labels (equivalent to green-300, dynamically adjusted)
+**Default Fallback Colors**:
+- Primary: `rgb(134, 239, 172)`
+- Secondary: `rgb(74, 222, 128)`
+- Placeholder: `rgba(34, 197, 94, 0.8)`
+- Muted: `rgb(22, 163, 74)`
+- Button: `rgb(134, 239, 172)`
 
-**Default Colors (fallback):**
-- Primary: `rgb(134, 239, 172)` (green-300)
-- Secondary: `rgb(74, 222, 128)` (green-400)
-- Placeholder: `rgba(34, 197, 94, 0.8)` (green-500/80)
-- Muted: `rgb(22, 163, 74)` (green-600)
-- Button: `rgb(134, 239, 172)` (green-300)
-
-### Text Colors (Primary)
-**NOTE**: Use `useReactiveColors()` hook instead of hardcoded Tailwind classes for text colors.
-
-- **Primary Text**: Use `colors.primary` from `useReactiveColors()` hook - Main content text
-- **Labels/Secondary Text**: Use `colors.secondary` - Labels, headings, secondary information
-- **Placeholder Text**: Use `colors.placeholder` - Input placeholders (automatically styled via CSS)
-- **Muted Text**: Use `colors.muted` - Only for completed/strikethrough items (intentionally muted)
-- **Button Text**: Use `colors.button` - Button labels
+**Implementation**: Wallpaper analyzed via canvas API → brightness calculated → RGB adjusted while preserving hue. Colors stored in React Context (`ColorContext.tsx`) and persisted to localStorage. CSS custom properties set for global access.
 
 ### Borders (Unified Neutral)
-- **Default Border**: `border-white/20` - All widget borders, input fields, buttons
-- **Hover Border**: `border-white/50` - More visible on hover
-- **Focus Border**: `border-white/50` - Input focus states
-- **Internal Dividers**: `border-white/10` - Subtle dividers within widgets
-- **NO COLORED BORDERS** - All borders must be white/neutral to be reactive to wallpaper
+
+**NEVER use colored borders** - All borders must be white/neutral:
+- Default: `border-white/20`
+- Hover/Focus: `border-white/50`
+- Dividers: `border-white/10`
 
 ### Backgrounds
-- **Widget Background**: `bg-black/40` - Semi-transparent with backdrop blur
-- **Input Fields**: `bg-black/10` - Subtle background for inputs
-- **Buttons**: `bg-white/10` - Default button background
-- **Button Hover**: `bg-white/15` - Hover state
-- **Modal Background**: `bg-black/40 backdrop-blur-xl` - Same as widgets
 
-### Shadows
-- **Widget Shadow**: Standard dark shadow with subtle inset highlight
-- **Button Shadow**: `hover:shadow-white/20` - White glow on hover
-- **Input Shadow**: `inset 0 1px 2px rgba(0, 0, 0, 0.3)` - Subtle inset shadow
+- Widgets: `bg-black/40 backdrop-blur-xl`
+- Inputs: `bg-black/10`
+- Buttons: `bg-white/10`, hover: `bg-white/15`
+- Modals: `bg-black/40 backdrop-blur-xl`
 
-### Scrollbar
-- **Thumb**: `rgba(255, 255, 255, 0.2)` - Neutral white
-- **Thumb Hover**: `rgba(255, 255, 255, 0.4)` - More visible on hover
+### Shadows & Scrollbar
 
-## Modular Widget System Architecture
+- Widget shadow: Standard dark with subtle inset highlight
+- Button hover: `hover:shadow-white/20`
+- Input shadow: `inset 0 1px 2px rgba(0, 0, 0, 0.3)`
+- Scrollbar thumb: `rgba(255, 255, 255, 0.2)`, hover: `rgba(255, 255, 255, 0.4)`
+
+## Widget Architecture
 
 ### Three-Layer System
 
-HyperDash uses a three-layer modular architecture for widgets:
+1. **Dashboard** (`app/components/Dashboard.tsx`): Manages widget configuration, layout slots, widget props via `getWidgetProps()`
+2. **WidgetContainer** (`app/components/WidgetContainer.tsx`): Lazy loads widgets, handles empty slots, passes focus props
+3. **Widget** (`app/components/[WidgetName]Widget.tsx`): Individual components using base `Widget` component
 
-1. **Dashboard Layer** (`app/components/Dashboard.tsx`)
-   - Top-level component that manages widget configuration
-   - Loads configuration from localStorage on mount
-   - Calculates layout slots from configuration
-   - Maps widget positions to containers dynamically
-   - Handles widget-specific props through `getWidgetProps()` function
-   - Maintains grid layout structure (currently 3+2, but derived from configuration)
+### Widget Registry (`app/lib/widgetRegistry.ts`)
 
-2. **Widget Container Layer** (`app/components/WidgetContainer.tsx`)
-   - Position slots (1-5) that conditionally render widgets
-   - Lazy loads widget components using React.lazy() and Suspense
-   - Only loads widgets when assigned to a slot (code splitting)
-   - Handles empty slots (when widgetType is null)
-   - Adds `id` and `data-widget-position` attributes for future keyboard shortcuts
-   - Shows loading state while widgets load
+- `WidgetType`: Union type `'clock' | 'weather' | 'system' | 'todo' | 'notepad'`
+- Dynamic import registry for code splitting
+- Type-safe widget loading
 
-3. **Widget Layer** (`app/components/[WidgetName]Widget.tsx`)
-   - Individual widget components in separate files
-   - Each widget is code-split into its own chunk
-   - Only loaded when assigned to a slot
-   - Receives props from Dashboard through WidgetContainer
-   - Uses base `Widget` component for consistent styling
+### Widget Configuration (`app/lib/widgetConfig.ts`)
 
-### Widget Registry System
+- **WidgetSlot**: `{ position: number, widgetType: WidgetType | null }`
+- **WidgetConfiguration**: Array of `WidgetSlot` objects
+- Persisted to localStorage (`'hyperdash-widget-config'`)
+- Positions numbered left-to-right, top-to-bottom (1-3 = top row, 4-5 = bottom row)
+- Default: Clock(1), Weather(2), System(3), Todo(4), Notepad(5)
 
-**File**: `app/lib/widgetRegistry.ts`
+**Key Functions**:
+- `getWidgetConfiguration()` - Loads from localStorage or returns default
+- `saveWidgetConfiguration(config)` - Saves to localStorage
+- `getFocusablePositions(config)` - Returns focusable positions (skips empty slots)
+- `getNextFocusPosition(current, config, direction)` - Calculates next/prev for Tab cycling
 
-The widget registry maps widget types to dynamic import paths for code splitting:
+### Base Widget Component (`app/components/Widget.tsx`)
 
-- **WidgetType**: Union type defining available widget types: `'clock' | 'weather' | 'system' | 'todo' | 'notepad'`
-- **Dynamic Import Registry**: Maps widget types to import functions
-- **Code Splitting**: Each widget becomes its own chunk, only loaded when needed
-- **Type Safety**: TypeScript ensures only valid widget types are used
+All widgets use base `Widget` component:
+- Unified styling: `border-white/20`, `bg-black/40 backdrop-blur-xl`
+- Hover effects: `border-white/50`, `-translate-y-[1px]`, `shadow-xl`, `transition-all duration-300`
+- Focus styling: Same as hover (applied when `isFocused={true}`)
+- Conditional hover: Disabled when `keyboardControl` is true
 
-**Key Functions:**
-- `loadWidget(type: WidgetType)`: Dynamically loads a widget component
-- `isValidWidgetType(type: string)`: Type guard for widget type validation
-- `getAvailableWidgetTypes()`: Returns array of all available widget types
+## Focus System (Hyprland-Style)
 
-**Adding New Widget Types:**
-1. Add widget type to `WidgetType` union type
-2. Add dynamic import entry to `widgetComponents` registry
-3. Create widget component file in `app/components/`
-4. Register in WidgetContainer's `lazyWidgets` object
+**Architecture**: Dual input control (keyboard + mouse) with keyboard precedence. Keyboard control expires after 2 seconds.
 
-### Widget Configuration System
+**FocusContext** (`app/components/FocusContext.tsx`):
+- `focusedPosition: number | null` - Currently focused widget (1-5)
+- `keyboardControl: boolean` - True when keyboard active (2s timeout)
+- `setFocusedPositionFromKeyboard(position)` - Asserts keyboard control, disables mouse
+- `setFocusedPositionFromMouse(position)` - Only works if keyboard control inactive
 
-**File**: `app/lib/widgetConfig.ts`
+**Keyboard Shortcuts** (`app/lib/useKeyboardShortcuts.ts`):
+- `1-9`: Direct focus to widget position (skips empty slots)
+- `Tab`: Cycle forward through widgets (wraps around)
+- `Shift+Tab`: Cycle backward (wraps around)
+- Disabled when editing text (inputs, textareas)
 
-The configuration system manages widget positions and assignments:
+**Integration**:
+- Dashboard wraps with `<FocusProvider>`, passes `isFocused` to WidgetContainer
+- WidgetContainer handles `onMouseEnter` → `setFocusedPositionFromMouse()`
+- Widget components accept `isFocused?: boolean` prop, pass to base `Widget`
+- Base `Widget` applies focus styling and conditionally disables hover
 
-- **WidgetSlot Interface**: `{ position: number, widgetType: WidgetType | null }`
-  - `position`: Slot number (1-5, or more in future)
-  - `widgetType`: Widget type assigned to slot, or `null` for empty slot
-- **WidgetConfiguration Type**: Array of `WidgetSlot` objects
-- **localStorage Persistence**: Configuration stored under key `'hyperdash-widget-config'`
-- **Default Configuration**: Positions 1-5 mapped to Clock, Weather, System, Todo, Notepad
-
-**Key Functions:**
-- `getWidgetConfiguration()`: Loads config from localStorage or returns default
-- `saveWidgetConfiguration(config)`: Saves config to localStorage
-- `getWidgetByPosition(position)`: Gets slot by position number
-- `getWidgetsSortedByPosition()`: Returns slots sorted by position
-- `getLayoutSlots(config)`: Calculates topRow and bottomRow from configuration
-  - Positions 1-3 → top row (3 columns)
-  - Positions 4-5 → bottom row (2 columns)
-  - Fills empty slots if needed
-
-**Configuration Structure:**
-```typescript
-const config: WidgetConfiguration = [
-  { position: 1, widgetType: 'clock' },
-  { position: 2, widgetType: 'weather' },
-  { position: 3, widgetType: 'system' },
-  { position: 4, widgetType: 'todo' },
-  { position: 5, widgetType: 'notepad' },
-];
-```
-
-### WidgetContainer Component
-
-**File**: `app/components/WidgetContainer.tsx`
-
-The WidgetContainer component handles lazy loading and rendering of widgets:
-
-**Props:**
-- `position: number` - Position slot number (1-5)
-- `widgetType: WidgetType | null` - Widget type or null for empty slot
-- `widgetProps?: Record<string, any>` - Props to pass to widget
-
-**Implementation Details:**
-- Uses `React.lazy()` at module level for each widget type
-- Wraps widget in `Suspense` boundary with loading fallback
-- Renders empty container div if `widgetType` is null
-- Adds `id={`widget-${position}`}` for future keyboard shortcuts
-- Adds `data-widget-position={position}` attribute for querying
-
-**Lazy Loading Pattern:**
-```tsx
-const lazyWidgets: Record<WidgetType, React.LazyExoticComponent<...>> = {
-  clock: lazy(() => import('../components/ClockWidget')),
-  weather: lazy(() => import('../components/WeatherWidget')),
-  // ... etc
-};
-```
-
-**Empty Slot Handling:**
-- Empty slots render as empty div containers
-- Ready for future drag-and-drop UI
-- Prevents unnecessary API calls/data fetching
-
-### Widget Props Management
-
-**Dashboard Integration** (`app/components/Dashboard.tsx`):
-
-The Dashboard component manages widget-specific props through a mapping function:
-
-```tsx
-const getWidgetProps = (widgetType: WidgetType | null, position: number) => {
-  if (widgetType === 'weather') {
-    return { onLoadComplete: handleWeatherLoadComplete };
-  }
-  return {};
-};
-```
-
-**Pattern:**
-- Widgets that need Dashboard-level callbacks receive them via props
-- Props are passed through WidgetContainer to the lazy-loaded widget
-- Allows widgets to communicate with Dashboard (e.g., loading states, events)
-
-### Position-Based Layout Rules
-
-**Position Numbering:**
-- Positions are numbered **left-to-right, top-to-bottom**
-- Current layout: Positions 1-3 = top row, Positions 4-5 = bottom row
-- Positions are independent of widget types (any widget can go in any slot)
-
-**Layout Calculation:**
-- `getLayoutSlots()` function maps positions to rows
-- Top row: positions 1-3 (always 3 slots)
-- Bottom row: positions 4-5 (always 2 slots)
-- Empty slots are filled if configuration is incomplete
-- Future: Layout structure will be configurable (e.g., 2+3, 4+1, etc.)
-
-**Position Assignment:**
-- Each widget slot has a unique position number
-- Widgets can be reassigned to different positions
-- Empty slots have `widgetType: null`
-- Configuration persists across sessions via localStorage
-
-**Future Keyboard Shortcuts:**
-- Each widget container has `id={`widget-${position}`}`
-- Enables keyboard shortcuts (1-5 keys) to focus widgets
-- `data-widget-position` attribute for easy querying
-
-## Component Structure
-
-### Widget Component
-All widgets use the base `Widget` component:
-- Unified white border (`border-white/20`)
-- Semi-transparent background (`bg-black/40 backdrop-blur-xl`)
-- Hover effects:
-  - Border transitions to `border-white/50`
-  - Subtle upward lift (`hover:-translate-y-[1px]`)
-  - Enhanced shadow (`hover:shadow-xl`)
-  - Smooth 300ms transition (`transition-all duration-300`)
-- Title with `border-white/10` divider
-- Flex column layout with proper height constraints
-
-### Layout Structure
-- **Position-Based System**: Widgets are assigned positions 1-5 (left-to-right, top-to-bottom)
-  - Positions 1-3: Top row (33.33% height, 3 equal columns)
-  - Positions 4-5: Bottom row (66.66% height, 2 columns, 50/50 split)
-- **Configurable Layout**: Widget positions are stored in localStorage and can be reordered
-- **Default Configuration**: Clock (1), Weather (2), System (3), Todo (4), Notepad (5)
-- Grid layout with proper height constraints (`flex-1 min-h-0`)
-- Future: Layout structure will be fully configurable via UI
-
-### Widget-Specific Patterns
-
-#### Todo Widget
-- Input field with `border-white/20`, focus: `border-white/50`
-- Add button with neutral white styling
-- Todo items with `border-white/10`, hover: `border-white/30`
-- Checkbox accent: `accent-green-400` (matches text scheme)
-- Delete button: `text-green-400`, hover: `text-green-300`
-- **Drag-and-drop reordering**: 
-  - Drag handle (grid of dots SVG) positioned to the left of delete button
-  - Real-time visual reordering as you drag (items shift position immediately)
-  - Browser drag ghost image is hidden using transparent canvas
-  - Uses `draggedId` and `dragOverId` state for tracking
-  - `getDisplayTodos()` function calculates visual order during drag
-
-#### Notepad Widget
-- Textarea with `border-white/20`, focus: `border-white/50`
-- Scrollable content area with `overflow-y-auto min-h-0`
-
-#### System Info Widget
-- Labels: `text-green-400`
-- Values: `text-green-300`
-- Settings button: Neutral white styling
-- Modal: Same styling as widgets
-
-## Styling Conventions
-
-### Border Rules
-1. **NEVER use colored borders** (pink, blue, cyan, green for borders)
-2. Always use `border-white/[opacity]` for consistency
-3. Default: `border-white/20`
-4. Hover/Focus: `border-white/50`
-5. Internal dividers: `border-white/10`
-
-### Background Rules
-1. Widgets: `bg-black/40` with `backdrop-blur-xl`
-2. Inputs: `bg-black/10`
-3. Buttons: `bg-white/10`
-4. Always use semi-transparent backgrounds for blur effect
-
-### Text Rules
-1. **NEVER use hardcoded Tailwind green color classes** (e.g., `text-green-300`, `text-green-400`)
-2. **ALWAYS use `useReactiveColors()` hook** to access reactive color palette
-3. Apply colors via inline styles: `style={{ color: colors.primary }}`
-4. Primary content: `colors.primary`
-5. Labels/secondary: `colors.secondary`
-6. Placeholders: `colors.placeholder` (automatically styled via CSS custom properties)
-7. Muted (completed items): `colors.muted`
-8. Buttons: `colors.button`
-
-### Spacing & Layout
-- Use `flex-1 min-h-0` for scrollable containers
-- Use `overflow-hidden` on parent containers to constrain children
-- Padding: `p-4` for widgets, `p-3` for inputs
-- Gap: `gap-4` between widgets, `gap-2` for internal spacing
+**Adding Focus to New Widgets**: Accept `isFocused?: boolean` prop → pass to base `<Widget>` component. No additional logic needed.
 
 ## Widget Requirements
 
 ### All Widgets Must:
-1. Use the base `Widget` component (no custom border colors)
-2. Have proper height constraints for scrolling when needed
-3. Use consistent text color hierarchy
-4. Have neutral white borders (reactive to wallpaper)
-5. Support hover effects (automatic via base Widget component):
-   - Border transition to `border-white/50`
-   - Subtle upward lift of 1px
-   - Enhanced shadow
-   - Smooth 300ms transition
+1. Use base `Widget` component
+2. Accept and pass `isFocused?: boolean` prop
+3. Use `useReactiveColors()` hook for colors (inline styles: `style={{ color: colors.primary }}`)
+4. NEVER use hardcoded Tailwind green classes (`text-green-300`, etc.)
+5. Proper height constraints for scrolling (`flex-1 min-h-0`)
+6. Neutral white borders only
 
 ### Input Fields Must:
-1. Use `border-white/20` default
-2. Use `border-white/50` on focus
-3. Use `style={{ color: colors.primary }}` for text color (from `useReactiveColors()`)
-4. Placeholder color is automatically handled via CSS custom property `--text-placeholder`
-5. Have `bg-black/10` background
-6. Include proper inset shadows
+- `border-white/20`, focus: `border-white/50`
+- `bg-black/10`
+- `style={{ color: colors.primary }}`
+- Placeholder auto-styled via CSS custom property
 
 ### Buttons Must:
-1. Use `bg-white/10` background
-2. Use `border-white/30` border
-3. Use `style={{ color: colors.button }}` for text color (from `useReactiveColors()`)
-4. Hover: `bg-white/15`, `border-white/50`
-5. Include subtle shadows
-
-## Widget Focus System
-
-### Hyprland-Style Focus Architecture
-
-HyperDash implements a **Hyprland-inspired focus system** where both mouse and keyboard can control widget focus, with intelligent precedence handling:
-
-**Key Characteristics:**
-- **Visual Highlighting**: Focused widgets display same visual style as hover (border-white/50, upward lift, enhanced shadow)
-- **Dual Input Control**: Both keyboard shortcuts and mouse hover can control focus
-- **Smart Precedence**: Keyboard input takes priority, mouse hover is disabled during keyboard control
-- **Automatic Recovery**: Mouse hover re-enables after keyboard control timeout (2 seconds)
-- **No Persistence**: Focus state does not persist across page reloads
-- **Skip Empty Slots**: Tab cycling automatically skips empty widget slots
-
-### Focus Context (`app/components/FocusContext.tsx`)
-
-**Purpose**: Centralized React Context for managing global focus state across the dashboard.
-
-**State Management:**
-- `focusedPosition: number | null` - Currently focused widget position (1-5, or null if none)
-- `isMouseActive: boolean` - Tracks recent mouse movement (debounced, 100ms)
-- `keyboardControl: boolean` - True when keyboard has been used recently (2-second timeout)
-
-**Key Functions:**
-- `setFocusedPositionFromKeyboard(position)` - Sets focus via keyboard, asserts keyboard control, disables mouse
-- `setFocusedPositionFromMouse(position)` - Sets focus via mouse, only if keyboard control is not active
-- `setMouseActive(active)` - Manually set mouse activity state
-- `setKeyboardControl(control)` - Manually set keyboard control state
-
-**Mouse Activity Detection:**
-- Global `mousemove` listener with 100ms debounce
-- `isMouseActive` becomes false after 100ms of stillness
-- Automatically updates when mouse moves or becomes still
-
-**Keyboard Control Timeout:**
-- When keyboard navigation is used, `keyboardControl` is set to true
-- After 2 seconds of no keyboard input, `keyboardControl` automatically resets to false
-- This allows mouse hover to resume control naturally
-
-**Implementation Pattern:**
-```tsx
-// In FocusContext.tsx
-const setFocusedPositionFromKeyboard = useCallback((position: number | null) => {
-  setFocusedPosition(position);
-  setMouseActive(false);
-  setKeyboardControlWithTimeout(true); // Sets keyboard control with 2-second auto-reset
-}, [setKeyboardControlWithTimeout]);
-
-const setFocusedPositionFromMouse = useCallback((position: number | null) => {
-  // Only allow mouse to change focus if keyboard doesn't have control
-  if (!keyboardControl) {
-    setFocusedPosition(position);
-    setKeyboardControlWithTimeout(false);
-  }
-}, [keyboardControl, setKeyboardControlWithTimeout]);
-```
-
-### Focus Integration with Widget Architecture
-
-**Dashboard Layer** (`app/components/Dashboard.tsx`):
-- Wrapped with `<FocusProvider>` to provide focus context to all children
-- Consumes focus context via `useFocus()` hook
-- Passes `isFocused`, `isMouseActive`, `keyboardControl`, and `setFocusedPositionFromMouse` to WidgetContainer components
-- Each widget receives `isFocused={focusedPosition === slot.position}` prop
-
-**Widget Container Layer** (`app/components/WidgetContainer.tsx`):
-- Receives focus-related props from Dashboard
-- Handles `onMouseEnter` event to call `setFocusedPositionFromMouse(position)`
-- Mouse focus only applies if keyboard control is not active (handled by FocusContext)
-- Passes `isFocused` prop down to lazy-loaded widget components
-
-**Widget Layer** (`app/components/Widget.tsx`):
-- Base `Widget` component consumes `keyboardControl` directly from `useFocus()` hook
-- Individual widget components receive and pass `isFocused` prop to base `Widget`
-- **Architectural Principle**: Individual widgets only know "Am I Focused?" - they don't manage focus logic
-- Base `Widget` applies focus styling when `isFocused` is true:
-  - Border: `border-white/50`
-  - Shadow: `shadow-xl`
-  - Transform: `-translate-y-[1px]`
-- Base `Widget` conditionally disables hover effects when `keyboardControl` is true:
-  - Prevents visual "double focus" when keyboard has control
-  - Hover effects only apply when mouse is in control
-
-### Focus Keyboard Shortcuts
-
-**Implemented in** `app/lib/useKeyboardShortcuts.ts`:
-
-- **`1-9` Keys**: Switch focus directly to widget at that position
-  - Position 1 = first widget (top-left)
-  - Position 2 = second widget (top-middle)
-  - Etc. (follows left-to-right, top-to-bottom order)
-  - Only switches to positions with assigned widgets (skips empty slots)
-  
-- **`Tab` Key**: Cycle focus forward through widgets
-  - Moves to next focusable widget position
-  - Wraps around: last position → first position
-  - Automatically skips empty slots
-  - `e.preventDefault()` blocks default browser Tab behavior
-  
-- **`Shift + Tab`**: Cycle focus backward through widgets
-  - Moves to previous focusable widget position
-  - Wraps around: first position → last position
-  - Automatically skips empty slots
-  - `e.preventDefault()` blocks default browser Tab behavior
-
-**Shortcut Behavior:**
-- Focus shortcuts are **disabled when editing text** (inputs, textareas, contenteditable)
-- Same pattern as existing global shortcuts (Settings, Wallpaper Upload, etc.)
-- All focus shortcuts call `setFocusedPositionFromKeyboard()` to assert keyboard control
-- Keyboard control automatically disables mouse hover for 2 seconds
-
-**Implementation Details:**
-```tsx
-// Example: Tab key handler
-if (e.key === 'Tab' && !e.shiftKey) {
-  e.preventDefault();
-  e.stopPropagation();
-  const config = getWidgetConfiguration();
-  const nextPosition = getNextFocusPosition(focusedPosition, config, 'forward');
-  if (nextPosition !== null) {
-    setFocusedPositionFromKeyboard(nextPosition); // Asserts keyboard control
-  }
-  return;
-}
-```
-
-### Focus Helper Functions
-
-**In `app/lib/widgetConfig.ts`:**
-
-- `getFocusablePositions(config: WidgetConfiguration): number[]`
-  - Filters out empty slots (widgetType === null)
-  - Returns sorted array of focusable positions
-  - Used for Tab cycling and position validation
-
-- `getNextFocusPosition(current: number | null, config: WidgetConfiguration, direction: 'forward' | 'backward'): number | null`
-  - Calculates next/previous focusable position for Tab cycling
-  - Direction: 'forward' for Tab, 'backward' for Shift+Tab
-  - Handles wrapping: forward wraps to start, backward wraps to end
-  - Returns null if no focusable positions exist
-  - Automatically skips empty slots
-
-**Example Pattern:**
-```tsx
-const focusablePositions = getFocusablePositions(config); // [1, 2, 3, 4, 5]
-const nextPosition = getNextFocusPosition(3, config, 'forward'); // Returns 4
-const prevPosition = getNextFocusPosition(1, config, 'backward'); // Returns 5 (wrap around)
-```
-
-### Focus Visual Styling Rules
-
-**Focused Widget Styling:**
-- Same visual appearance as hover state for consistency
-- Border: `border-white/50` (more visible than default `border-white/20`)
-- Shadow: `shadow-xl` (enhanced shadow)
-- Transform: `-translate-y-[1px]` (subtle upward lift)
-- Smooth 300ms transition for all properties
-
-**Hover vs. Keyboard Control:**
-- When `keyboardControl` is true, hover effects are disabled
-- This prevents two widgets from appearing focused simultaneously
-- When mouse hovers over a widget while keyboard has control, no visual feedback
-- After 2-second timeout, keyboard control expires and hover effects resume
-
-**Conditional Hover Classes in Widget.tsx:**
-```tsx
-className={`
-  // ... other classes
-  ${!keyboardControl ? 'hover:shadow-xl hover:border-white/50 hover:-translate-y-[1px]' : ''}
-  // ... other classes
-`}
-```
-
-### Focus System Architecture Principles
-
-1. **Centralized Logic**: Focus state and logic are managed in Dashboard/Container layers, not in individual widgets
-2. **Widget Simplicity**: Individual widgets only receive and pass `isFocused` prop - they don't know about focus management
-3. **Base Component Styling**: Base `Widget` component handles all focus styling and hover behavior
-4. **Context-Based**: `FocusContext` provides global state accessible anywhere in the tree
-5. **Smart Precedence**: Keyboard input always takes priority over mouse input, with automatic timeout recovery
-6. **No Persistence**: Focus state is ephemeral and doesn't persist across page reloads
-7. **Accessibility**: Focus cycling (Tab/Shift+Tab) follows logical left-to-right, top-to-bottom order
-
-### Adding Focus Support to New Widgets
-
-When creating new widgets, follow these steps for focus integration:
-
-1. **Widget Component**: Accept `isFocused?: boolean` prop in widget's props interface
-2. **Pass to Base Widget**: Pass `isFocused` to the base `<Widget>` component
-3. **No Additional Logic**: Do NOT add focus management logic to individual widgets
-4. **That's It**: The base `Widget` component and `FocusContext` handle everything else
-
-**Example:**
-```tsx
-interface MyNewWidgetProps {
-  isFocused?: boolean;
-}
-
-export default function MyNewWidget({ isFocused }: MyNewWidgetProps) {
-  return (
-    <Widget title="My New Widget" isFocused={isFocused}>
-      {/* Widget content */}
-    </Widget>
-  );
-}
-```
-
-## File Structure
-```
-app/
-  components/
-    Widget.tsx          # Base widget component with focus styling
-    Dashboard.tsx       # Main layout, manages widget configuration and focus
-    WidgetContainer.tsx # Container component for lazy loading widgets and focus events
-    ColorContext.tsx    # Reactive color context provider
-    FocusContext.tsx    # Global focus state management (Hyprland-style)
-    ClockWidget.tsx
-    WeatherWidget.tsx
-    SystemInfoWidget.tsx
-    TodoWidget.tsx
-    NotepadWidget.tsx
-  lib/
-    widgetRegistry.ts      # Widget type definitions and dynamic import registry
-    widgetConfig.ts        # Widget configuration management and focus helpers
-    utils.ts               # localStorage helpers
-    colorUtils.ts          # Wallpaper analysis and color calculation
-    useKeyboardShortcuts.ts # Global keyboard shortcuts including focus navigation
-  globals.css              # Global styles, scrollbar, CSS custom properties
-```
-
-## Key Principles
-
-1. **Wallpaper Reactive**: 
-   - All borders use white/neutral colors that adapt to background via backdrop blur
-   - Text colors dynamically adjust based on wallpaper brightness for optimal contrast
-2. **Consistency**: Unified color scheme across all widgets
-3. **Visibility**: Text colors automatically adapt for readability on any wallpaper
-4. **Modern Aesthetic**: Monospace fonts, thin borders, semi-transparency, backdrop blur
-5. **Accessibility**: Good contrast ratios while maintaining aesthetic, automatically optimized per wallpaper
-
-## Reactive Color System
-
-### Implementation Details
-
-**Files:**
-- `app/lib/colorUtils.ts`: Contains wallpaper analysis and color calculation functions
-- `app/components/ColorContext.tsx`: React context provider for reactive colors
-- `app/globals.css`: CSS custom properties for global color access
-
-**Usage in Components:**
-```tsx
-import { useReactiveColors } from './ColorContext';
-
-export default function MyWidget() {
-  const { colors } = useReactiveColors();
-  
-  return (
-    <div style={{ color: colors.primary }}>
-      <h2 style={{ color: colors.secondary }}>Title</h2>
-      <input style={{ color: colors.primary }} />
-      {/* Placeholder automatically styled via CSS */}
-    </div>
-  );
-}
-```
-
-**Color Calculation Algorithm:**
-1. Wallpaper image is analyzed using canvas API (downsampled for performance)
-2. Average brightness is calculated using weighted formula: `(R * 0.299 + G * 0.587 + B * 0.114) / 255`
-3. Brightness is normalized to 0-1 scale
-4. Adjustment factor is calculated:
-   - Dark (< 0.3): factor = 1 + (0.3 - brightness) * 0.8
-   - Medium (0.3-0.7): factor = 1.0
-   - Light (> 0.7): factor = 1 - (brightness - 0.7) * 0.6
-5. RGB values are adjusted while maintaining hue (green theme preserved)
-
-**CSS Custom Properties:**
-- `--text-primary`: Set dynamically by ColorContext
-- `--text-secondary`: Set dynamically by ColorContext
-- `--text-placeholder`: Set dynamically by ColorContext (used for input/textarea placeholders)
-- `--text-muted`: Set dynamically by ColorContext
-- `--text-button`: Set dynamically by ColorContext
-
-**Persistence:**
-- Reactive colors are saved to localStorage when wallpaper changes
-- Colors are restored on page load if wallpaper exists
-- Default colors used if no wallpaper or analysis fails
+- `bg-white/10`, hover: `bg-white/15`
+- `border-white/30`, hover: `border-white/50`
+- `style={{ color: colors.button }}`
 
 ## Adding New Widgets
 
-When adding new widgets, follow this complete process:
-
 ### Step 1: Create Widget Component
-1. Create new widget file: `app/components/[WidgetName]Widget.tsx`
-2. Use the base `Widget` component (no `borderColor` prop)
-3. Follow the unified white border scheme
-4. **Accept and pass `isFocused?: boolean` prop** to base `Widget` component for focus support
-5. **Import and use `useReactiveColors()` hook** to access dynamic colors
-6. Apply colors via inline styles: `style={{ color: colors.primary }}`
-7. **NEVER use hardcoded Tailwind green classes** (text-green-300, etc.)
-8. Ensure proper height constraints for scrolling if needed
-9. Match button and input styling patterns
-10. Test hover states for visibility
-11. Placeholder colors are handled automatically via CSS
+- File: `app/components/[WidgetName]Widget.tsx`
+- Use base `Widget` component
+- Accept `isFocused?: boolean` prop
+- Use `useReactiveColors()` hook
+- Apply colors via inline styles
 
 ### Step 2: Register Widget Type
-1. Open `app/lib/widgetRegistry.ts`
-2. Add widget type to `WidgetType` union type: `'clock' | 'weather' | 'system' | 'todo' | 'notepad' | 'yourwidget'`
-3. Add dynamic import entry to `widgetComponents` registry:
-   ```typescript
-   yourwidget: () => import('../components/YourWidgetWidget'),
-   ```
+- Add to `WidgetType` union in `app/lib/widgetRegistry.ts`
+- Add dynamic import to `widgetComponents` registry
 
 ### Step 3: Register in WidgetContainer
-1. Open `app/components/WidgetContainer.tsx`
-2. Add lazy import entry to `lazyWidgets` object:
-   ```typescript
-   yourwidget: lazy(() => import('../components/YourWidgetWidget')),
-   ```
+- Add lazy import to `lazyWidgets` object in `app/components/WidgetContainer.tsx`
 
-### Step 4: Add to Configuration (Optional)
-1. Open `app/lib/widgetConfig.ts`
-2. Add widget to `DEFAULT_CONFIGURATION` array if desired:
-   ```typescript
-   { position: 6, widgetType: 'yourwidget' },
-   ```
-   Note: Default config currently has 5 slots, but can be extended
+### Step 4: Optional Configuration
+- Add to `DEFAULT_CONFIGURATION` in `app/lib/widgetConfig.ts` if desired
 
-### Step 5: Handle Widget Props (If Needed)
-1. Open `app/components/Dashboard.tsx`
-2. Add widget-specific props to `getWidgetProps()` function if widget needs Dashboard callbacks:
-   ```typescript
-   if (widgetType === 'yourwidget') {
-     return { onSomeEvent: handleSomeEvent };
-   }
-   ```
-
-### Widget Requirements Checklist
-- [ ] Widget component created in `app/components/`
-- [ ] Widget type added to `WidgetType` union in `widgetRegistry.ts`
-- [ ] Dynamic import added to `widgetComponents` in `widgetRegistry.ts`
-- [ ] Lazy import added to `lazyWidgets` in `WidgetContainer.tsx`
-- [ ] Widget uses base `Widget` component
-- [ ] Widget accepts and passes `isFocused?: boolean` prop to base `Widget` component
-- [ ] Widget uses `useReactiveColors()` hook for colors
-- [ ] No hardcoded Tailwind green color classes
-- [ ] Proper height constraints for scrolling if needed
-- [ ] Widget props added to Dashboard's `getWidgetProps()` if needed
-- [ ] Widget added to default configuration if desired
+### Step 5: Widget Props (If Needed)
+- Add to `getWidgetProps()` in `app/components/Dashboard.tsx` for Dashboard callbacks
 
 ## Common Patterns
 
@@ -703,128 +175,56 @@ When adding new widgets, follow this complete process:
 ```tsx
 import { useReactiveColors } from './ColorContext';
 
-function MyComponent() {
-  const { colors } = useReactiveColors();
-  
-  return (
-    <input
-      className="
-        bg-black/10
-        border border-white/20
-        focus:border-white/50
-      "
-      style={{ color: colors.primary }}
-      // Placeholder automatically styled via CSS custom property
-    />
-  );
-}
+const { colors } = useReactiveColors();
+<input
+  className="bg-black/10 border border-white/20 focus:border-white/50"
+  style={{ color: colors.primary }}
+/>
 ```
 
 ### Button
 ```tsx
 import { useReactiveColors } from './ColorContext';
 
-function MyComponent() {
-  const { colors } = useReactiveColors();
-  
-  return (
-    <button
-      className="
-        bg-white/10
-        border border-white/30
-        hover:bg-white/15
-        hover:border-white/50
-      "
-      style={{ color: colors.button }}
-    >
-      Button Text
-    </button>
-  );
-}
+const { colors } = useReactiveColors();
+<button
+  className="bg-white/10 border border-white/30 hover:bg-white/15 hover:border-white/50"
+  style={{ color: colors.button }}
+>
+  Button Text
+</button>
 ```
 
-### Divider
+### Drag-and-Drop Reordering
+
+**State**: Track `draggedId` and `dragOverId`, reset on `dragEnd`/`drop`
+
+**Visual Reordering**: Implement `getDisplayTodos()` that reorders array based on drag state. Render using this function during drag.
+
+**Hide Drag Ghost**:
 ```tsx
-<div className="border-t border-white/10 pt-2" />
+const canvas = document.createElement('canvas');
+canvas.width = 1; canvas.height = 1;
+e.dataTransfer.setDragImage(canvas, 0, 0);
 ```
 
-### Drag-and-Drop Reordering Pattern
+**Pattern**: Drag handle (grid dots SVG) left of action buttons. Use `cursor-grab`, `active:cursor-grabbing`. Enhanced border/shadow on dragged item. `transition-all duration-200`.
 
-When implementing drag-and-drop reordering for lists:
+## File Structure
 
-**State Management:**
-- Track `draggedId`: The item currently being dragged
-- Track `dragOverId`: The item currently being hovered over during drag
-- Reset both states on `dragEnd` and `drop`
-
-**Visual Reordering:**
-- Implement `getDisplayTodos()` function that calculates the visual order during drag
-- This function should reorder the array based on `draggedId` and `dragOverId`
-- Render using `getDisplayTodos()` instead of the original array during drag operations
-- The dragged item should appear in its new position visually, not stay in place with opacity
-
-**Hide Browser Drag Ghost:**
-- Use transparent canvas element in `handleDragStart`:
-```tsx
-const handleDragStart = (e: React.DragEvent, id: string) => {
-  setDraggedId(id);
-  e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/html', '');
-  
-  // Hide the default drag ghost image
-  const canvas = document.createElement('canvas');
-  canvas.width = 1;
-  canvas.height = 1;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    ctx.clearRect(0, 0, 1, 1);
-    e.dataTransfer.setDragImage(canvas, 0, 0);
-  }
-};
 ```
-
-**Drag Handle Pattern:**
-- Use grid of dots SVG icon (3x3 circles) for drag handle
-- Position handle to the left of action buttons (delete, etc.)
-- Style with `cursor-grab` and `active:cursor-grabbing`
-- Use reactive colors: `style={{ color: colors.secondary }}`
-- Make handle `select-none` to prevent text selection
-
-**Event Handlers:**
-- `onDragStart`: Set `draggedId`, hide drag ghost
-- `onDragOver`: Set `dragOverId`, prevent default
-- `onDragLeave`: Minimal handling (prevent flickering)
-- `onDrop`: Apply reordering, save to state/storage, reset drag states
-- `onDragEnd`: Fallback to apply visual order if drag ends without drop, reset states
-
-**Visual Feedback:**
-- Dragged item: Enhanced border (`border-white/50`) and shadow (`shadow-lg`)
-- Drop target: Subtle border highlight (`border-white/40`)
-- Use `transition-all duration-200` for smooth animations
-- Keep dragged item fully visible (no opacity reduction) - it should appear naturally in its new position
-
-**Example Pattern:**
-```tsx
-const [draggedId, setDraggedId] = useState<string | null>(null);
-const [dragOverId, setDragOverId] = useState<string | null>(null);
-
-const getDisplayTodos = () => {
-  if (!draggedId || !dragOverId || draggedId === dragOverId) {
-    return todos;
-  }
-  
-  const draggedIndex = todos.findIndex(todo => todo.id === draggedId);
-  const targetIndex = todos.findIndex(todo => todo.id === dragOverId);
-  
-  if (draggedIndex === -1 || targetIndex === -1) return todos;
-  
-  const newTodos = [...todos];
-  const [removed] = newTodos.splice(draggedIndex, 1);
-  newTodos.splice(targetIndex, 0, removed);
-  
-  return newTodos;
-};
-
-// Render: getDisplayTodos().map(...)
+app/
+  components/
+    Widget.tsx          # Base widget component
+    Dashboard.tsx       # Layout, widget config, focus management
+    WidgetContainer.tsx # Lazy loading, focus events
+    ColorContext.tsx    # Reactive color provider
+    FocusContext.tsx    # Global focus state
+    [WidgetName]Widget.tsx
+  lib/
+    widgetRegistry.ts      # Widget types, dynamic imports
+    widgetConfig.ts        # Configuration, focus helpers
+    colorUtils.ts          # Wallpaper analysis
+    useKeyboardShortcuts.ts # Global shortcuts
+  globals.css              # Global styles, CSS custom properties
 ```
-
