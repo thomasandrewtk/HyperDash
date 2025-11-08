@@ -100,14 +100,12 @@ export function FocusProvider({ children }: { children: ReactNode }) {
     setKeyboardControlWithTimeout(true);
   }, [setKeyboardControlWithTimeout]);
 
-  // Set focus from mouse - only works if keyboard doesn't have control
+  // Set focus from mouse click - always works (explicit interaction)
   const setFocusedPositionFromMouse = useCallback((position: number | null) => {
-    // Only allow mouse to change focus if keyboard doesn't have control
-    if (!keyboardControl) {
-      setFocusedPosition(position);
-      setKeyboardControlWithTimeout(false);
-    }
-  }, [keyboardControl, setKeyboardControlWithTimeout]);
+    // Click/interaction always changes focus
+    setFocusedPosition(position);
+    setKeyboardControlWithTimeout(false);
+  }, [setKeyboardControlWithTimeout]);
 
   return (
     <FocusContext.Provider

@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Widget from './Widget';
 import { getFromLocalStorage, saveToLocalStorage } from '@/app/lib/utils';
 import { useReactiveColors } from './ColorContext';
+import { useWidgetKeyboardShortcuts } from '@/app/lib/useWidgetKeyboardShortcuts';
 
 const STORAGE_KEY = 'hyperdash-notepad';
-const MAX_TABS = 20;
+const MAX_TABS = 9;
 
 interface NotepadTab {
   id: string;
@@ -28,6 +29,7 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
+  const [pendingActiveTabId, setPendingActiveTabId] = useState<string | null>(null);
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const tabNameInputRef = useRef<HTMLInputElement>(null);
@@ -97,6 +99,9 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
         const links = editorRef.current.querySelectorAll('a.notepad-image-link');
         previousLinkCountRef.current = links.length;
         setTimeout(() => renumberImageLinks(), 0);
+      } else {
+        // Tab not found yet - might be a race condition, reset the flag and try again
+        isSwitchingTabRef.current = false;
       }
     }
     
@@ -285,38 +290,49 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
 
   // Tab management functions
   const createTab = () => {
+    // Save current tab content before creating new tab
+    if (activeTabId && editorRef.current) {
+      const currentContent = editorRef.current.innerHTML;
+      setTabs(prevTabs => {
+        // Check tab limit
+        if (prevTabs.length >= MAX_TABS) {
+          return prevTabs;
+        }
+        return prevTabs.map(tab =>
+          tab.id === activeTabId ? { ...tab, content: currentContent } : tab
+        );
+      });
+    }
+    
+    // Create new tab
+    const newTabId = Date.now().toString();
     setTabs(prevTabs => {
       // Check tab limit
       if (prevTabs.length >= MAX_TABS) {
         return prevTabs;
       }
       
-      // Save current tab content before creating new tab
-      if (activeTabId && editorRef.current) {
-        const currentContent = editorRef.current.innerHTML;
-        const updatedTabs = prevTabs.map(tab =>
-          tab.id === activeTabId ? { ...tab, content: currentContent } : tab
-        );
-        const newTab: NotepadTab = {
-          id: Date.now().toString(),
-          name: `Notepad ${prevTabs.length + 1}`,
-          content: '',
-        };
-        isSwitchingTabRef.current = true;
-        setActiveTabId(newTab.id);
-        return [...updatedTabs, newTab];
-      }
-      
       const newTab: NotepadTab = {
-        id: Date.now().toString(),
+        id: newTabId,
         name: `Notepad ${prevTabs.length + 1}`,
         content: '',
       };
-      isSwitchingTabRef.current = true;
-      setActiveTabId(newTab.id);
+      
+      // Set pending active tab ID - will be activated once tab exists in array
+      setPendingActiveTabId(newTabId);
+      
       return [...prevTabs, newTab];
     });
   };
+
+  // Activate pending tab once it exists in the tabs array
+  useEffect(() => {
+    if (pendingActiveTabId && tabs.some(tab => tab.id === pendingActiveTabId)) {
+      isSwitchingTabRef.current = true;
+      setActiveTabId(pendingActiveTabId);
+      setPendingActiveTabId(null);
+    }
+  }, [pendingActiveTabId, tabs]);
 
   const switchTab = (tabId: string) => {
     if (tabId === activeTabId) return;
@@ -537,6 +553,117 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
     }
   };
 
+  // Helper function to check if text is a URL
+  const isURL = (text: string): boolean => {
+    try {
+      const url = new URL(text);
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      // Try with http:// prefix
+      try {
+        const url = new URL('http://' + text);
+        return url.hostname.length > 0;
+      } catch {
+        return false;
+      }
+    }
+  };
+
+  // Helper function to extract domain from URL
+  const getDomainFromURL = (urlString: string): string => {
+    try {
+      let url: URL;
+      try {
+        url = new URL(urlString);
+      } catch {
+        url = new URL('http://' + urlString);
+      }
+      return url.hostname.replace(/^www\./, ''); // Remove www. prefix
+    } catch {
+      return 'link';
+    }
+  };
+
+  // Insert a URL link similar to image links
+  const insertURLLink = (urlString: string) => {
+    if (!editorRef.current) return;
+    
+    // Normalize URL (add http:// if missing)
+    let normalizedURL = urlString.trim();
+    if (!normalizedURL.startsWith('http://') && !normalizedURL.startsWith('https://')) {
+      normalizedURL = 'https://' + normalizedURL;
+    }
+    
+    const domain = getDomainFromURL(normalizedURL);
+    const displayText = `[${domain}]`;
+    
+    // Create link element
+    const link = document.createElement('a');
+    link.href = normalizedURL;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = displayText;
+    link.className = 'notepad-url-link';
+    link.style.textDecoration = 'underline';
+    link.style.cursor = 'pointer';
+    
+    // Add click handler to open link (only on actual click, not on selection)
+    link.addEventListener('mousedown', (e) => {
+      // Allow normal text selection/deletion behavior
+      if (e.shiftKey || e.ctrlKey || e.metaKey) {
+        return; // Allow selection with modifier keys
+      }
+    });
+    
+    link.addEventListener('click', (e) => {
+      // Only prevent default if it's a simple click (not part of selection)
+      const selection = window.getSelection();
+      if (selection && selection.toString().length === 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.open(normalizedURL, '_blank', 'noopener,noreferrer');
+      }
+    });
+    
+    // Insert at cursor position
+    const selection = window.getSelection();
+    let insertRange: Range | null = null;
+    
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      // Check if the range is within the editor
+      if (editorRef.current.contains(range.commonAncestorContainer)) {
+        insertRange = range;
+      }
+    }
+    
+    if (insertRange && selection) {
+      // Insert at cursor position within editor
+      insertRange.deleteContents();
+      insertRange.insertNode(link);
+      insertRange.setStartAfter(link);
+      insertRange.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(insertRange);
+    } else {
+      // Insert at the end of editor content
+      const range = document.createRange();
+      range.selectNodeContents(editorRef.current);
+      range.collapse(false); // Collapse to end
+      range.insertNode(link);
+      
+      // Set cursor after the link
+      range.setStartAfter(link);
+      range.collapse(true);
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+    
+    handleInput();
+  };
+
   const handlePaste = (e: React.ClipboardEvent) => {
     e.preventDefault();
     const clipboardData = e.clipboardData;
@@ -553,8 +680,14 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
       }
     }
     
-    // Otherwise, paste text
-    const text = clipboardData.getData('text/plain');
+    // Check if text is a URL
+    const text = clipboardData.getData('text/plain').trim();
+    if (text && isURL(text)) {
+      insertURLLink(text);
+      return;
+    }
+    
+    // Otherwise, paste text as-is
     document.execCommand('insertText', false, text);
   };
 
@@ -649,100 +782,159 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
     }
   };
 
-  // Keyboard shortcuts
+  // Helper functions for keyboard shortcuts
+  const focusEditor = useCallback(() => {
+    if (editorRef.current) {
+      editorRef.current.focus();
+    }
+  }, []);
+
+  const handleNewTab = useCallback(() => {
+    createTab();
+  }, []); // createTab uses state setters which are stable
+
+  const handleCloseTab = useCallback(() => {
+    if (activeTabId) {
+      // Create a synthetic event for deleteTab
+      const syntheticEvent = {
+        stopPropagation: () => {},
+      } as React.MouseEvent;
+      deleteTab(activeTabId, syntheticEvent);
+    }
+  }, [activeTabId]); // deleteTab uses state setters which are stable
+
+  const handleRenameTab = useCallback(() => {
+    if (activeTabId) {
+      const syntheticEvent = {
+        stopPropagation: () => {},
+      } as React.MouseEvent;
+      startRenameTab(activeTabId, syntheticEvent);
+    }
+  }, [activeTabId]); // startRenameTab uses state setters which are stable
+
+  const handleAddImage = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const cycleTabForward = useCallback(() => {
+    if (tabs.length === 0) return;
+    const currentIndex = tabs.findIndex(tab => tab.id === activeTabId);
+    const nextIndex = (currentIndex + 1) % tabs.length;
+    switchTab(tabs[nextIndex].id);
+  }, [tabs, activeTabId]); // switchTab uses state setters which are stable
+
+  const cycleTabBackward = useCallback(() => {
+    if (tabs.length === 0) return;
+    const currentIndex = tabs.findIndex(tab => tab.id === activeTabId);
+    const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    switchTab(tabs[prevIndex].id);
+  }, [tabs, activeTabId]); // switchTab uses state setters which are stable
+
+  const switchToTabByNumber = useCallback((tabNumber: number) => {
+    if (tabNumber >= 1 && tabNumber <= tabs.length && tabNumber <= 9) {
+      switchTab(tabs[tabNumber - 1].id);
+    }
+  }, [tabs]); // switchTab uses state setters which are stable
+
+  // Widget keyboard shortcuts - only active when widget is focused
+  const shortcuts = useMemo(() => ({
+    'Enter': (_e: KeyboardEvent) => {
+      // Only focus editor if not already editing text in an input/textarea
+      const activeElement = document.activeElement;
+      if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
+        return; // Don't interfere with input editing
+      }
+      focusEditor();
+    },
+  }), [focusEditor]);
+
+  // Handle Ctrl+key combinations separately (useWidgetKeyboardShortcuts doesn't handle modifiers well)
   useEffect(() => {
+    if (!isFocused) return;
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle shortcuts when editor is focused or widget is active
-      if (!editorRef.current?.contains(document.activeElement) && 
-          !tabContainerRef.current?.contains(document.activeElement)) {
+      // Check for Ctrl+Alt+Arrow (macOS intercepts Ctrl+Arrow at system level)
+      // On Mac, Control+Arrow is intercepted by macOS, but Control+Alt+Arrow works
+      const isCtrlPressed = e.ctrlKey && !e.metaKey; // Ctrl must be pressed, Meta must NOT be pressed
+      const isAltPressed = e.altKey; // Alt/Option must also be pressed
+      
+      if (isCtrlPressed && isAltPressed) {
+        const isArrowRight = e.key === 'ArrowRight' || e.code === 'ArrowRight';
+        const isArrowLeft = e.key === 'ArrowLeft' || e.code === 'ArrowLeft';
+        
+        if (isArrowRight || isArrowLeft) {
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          
+          if (isArrowRight) {
+            cycleTabForward();
+          } else {
+            cycleTabBackward();
+          }
+          return;
+        }
+      }
+
+      // Only handle Ctrl combinations (not Cmd/Meta) - use Ctrl on both Mac and Windows
+      // Check: Ctrl must be pressed AND Meta/Cmd must NOT be pressed
+      if (!e.ctrlKey || e.metaKey) return;
+
+      // Don't interfere if editing text in inputs/textareas (but allow in contentEditable editor)
+      const activeElement = document.activeElement;
+      if (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) {
+        // Don't interfere with normal input editing
         return;
       }
-      
-      // Ctrl+T or Cmd+T: New tab
-      if ((e.ctrlKey || e.metaKey) && e.key === 't') {
-        e.preventDefault();
-        // Save current tab content before creating new tab
-        if (activeTabId && editorRef.current) {
-          setTabs(prevTabs => {
-            // Check tab limit
-            if (prevTabs.length >= MAX_TABS) {
-              return prevTabs;
-            }
-            
-            const currentContent = editorRef.current!.innerHTML;
-            const updatedTabs = prevTabs.map(tab =>
-              tab.id === activeTabId ? { ...tab, content: currentContent } : tab
-            );
-            const newTab: NotepadTab = {
-              id: Date.now().toString(),
-              name: `Notepad ${prevTabs.length + 1}`,
-              content: '',
-            };
-            isSwitchingTabRef.current = true;
-            setActiveTabId(newTab.id);
-            return [...updatedTabs, newTab];
-          });
-        } else {
-          setTabs(prevTabs => {
-            // Check tab limit
-            if (prevTabs.length >= MAX_TABS) {
-              return prevTabs;
-            }
-            
-            const newTab: NotepadTab = {
-              id: Date.now().toString(),
-              name: `Notepad ${prevTabs.length + 1}`,
-              content: '',
-            };
-            isSwitchingTabRef.current = true;
-            setActiveTabId(newTab.id);
-            return [...prevTabs, newTab];
-          });
-        }
-        return;
-      }
-      
-      // Ctrl+W or Cmd+W: Close active tab
-      if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
-        e.preventDefault();
-        if (activeTabId) {
-          setTabs(prevTabs => {
-            if (prevTabs.length === 1) {
-              // Can't delete the last tab, just clear its content
-              if (editorRef.current) {
-                editorRef.current.innerHTML = '';
-                setContent('');
-                return [{ ...prevTabs[0], content: '' }];
-              }
-              return prevTabs;
-            }
-            
-            // Save current tab content before deleting if it's the active tab
-            if (editorRef.current) {
-              const currentContent = editorRef.current.innerHTML;
-              const updatedTabs = prevTabs.map(tab =>
-                tab.id === activeTabId ? { ...tab, content: currentContent } : tab
-              );
-              const newTabs = updatedTabs.filter(tab => tab.id !== activeTabId);
-              
-              // Switch to another tab if deleting active tab
-              const index = prevTabs.findIndex(tab => tab.id === activeTabId);
-              const newActiveIndex = index > 0 ? index - 1 : 0;
-              isSwitchingTabRef.current = true;
-              setActiveTabId(newTabs[newActiveIndex].id);
-              
-              return newTabs;
-            }
-            return prevTabs;
-          });
-        }
-        return;
+
+      const key = e.key.toLowerCase();
+      switch (key) {
+        case 't':
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation(); // Prevent other handlers from running
+          handleNewTab();
+          break;
+        case 'w':
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation(); // Prevent other handlers from running
+          handleCloseTab();
+          break;
+        case 'r':
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          handleRenameTab();
+          break;
+        case 'i':
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+          handleAddImage();
+          break;
+        default:
+          // Check for Ctrl+1-9
+          const numKey = parseInt(e.key);
+          if (!isNaN(numKey) && numKey >= 1 && numKey <= 9) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            switchToTabByNumber(numKey);
+          }
+          break;
       }
     };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTabId]);
+
+    // Use capture phase with highest priority to catch events before browser handles them
+    // Only attach to document to avoid duplicate events (window and document both fire)
+    document.addEventListener('keydown', handleKeyDown, { capture: true, passive: false });
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, { capture: true } as EventListenerOptions);
+    };
+  }, [isFocused, handleNewTab, handleCloseTab, handleRenameTab, handleAddImage, cycleTabForward, cycleTabBackward, switchToTabByNumber]);
+
+  useWidgetKeyboardShortcuts(isFocused ?? false, shortcuts);
 
   return (
     <Widget title="Notepad" isFocused={isFocused}>
@@ -909,6 +1101,26 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
             contentEditable
             onInput={handleInput}
             onPaste={handlePaste}
+            onKeyDown={(e) => {
+              // Handle Ctrl+Alt+Arrow keys for tab cycling (macOS intercepts Ctrl+Arrow at system level)
+              const isCtrlPressed = e.ctrlKey && !e.metaKey;
+              const isAltPressed = e.altKey;
+              
+              if (isCtrlPressed && isAltPressed) {
+                const isArrowRight = e.key === 'ArrowRight' || e.code === 'ArrowRight';
+                const isArrowLeft = e.key === 'ArrowLeft' || e.code === 'ArrowLeft';
+                
+                if (isArrowRight) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  cycleTabForward();
+                } else if (isArrowLeft) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  cycleTabBackward();
+                }
+              }
+            }}
             onClick={(e) => {
               // Allow links to be clicked (only if not selecting text)
               const target = e.target as HTMLElement;
@@ -923,7 +1135,7 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
                 }
               }
             }}
-            className="h-full w-full bg-black/10 border border-white/20 rounded-sm p-3 font-mono text-sm focus:outline-none focus:border-white/50 focus:ring-1 focus:ring-white/30 transition-all duration-200 hover:border-white/40 overflow-y-auto overflow-x-hidden auto-hide-scrollbar"
+            className="h-full w-full bg-black/10 border border-white/20 rounded-sm p-3 font-mono text-sm focus:outline-none focus:border-white/50 focus:ring-1 focus:ring-white/30 transition-all duration-200 overflow-y-auto overflow-x-hidden auto-hide-scrollbar"
             style={{
               color: colors.primary,
               boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.3)',

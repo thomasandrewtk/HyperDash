@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Widget from './Widget';
 import { useReactiveColors } from './ColorContext';
 import { getFromLocalStorage, saveToLocalStorage } from '@/app/lib/utils';
+import { useWidgetKeyboardShortcuts } from '@/app/lib/useWidgetKeyboardShortcuts';
 
 type TimerMode = 'work' | 'shortBreak' | 'longBreak';
 
@@ -263,6 +264,17 @@ export default function ClockWidget({ isFocused }: { isFocused?: boolean }) {
       setTimeLeft(WORK_DURATION);
     }
   };
+
+  // Widget keyboard shortcuts - only active when widget is focused
+  const shortcuts = useMemo(() => ({
+    ' ': (_e: KeyboardEvent) => handleStartPause(),
+    'r': (_e: KeyboardEvent) => handleReset(),
+    'R': (_e: KeyboardEvent) => handleReset(),
+    'k': (_e: KeyboardEvent) => handleSkip(),
+    'K': (_e: KeyboardEvent) => handleSkip(),
+  }), [isRunning, mode, pomodoroCount]); // Depend on state that handlers use
+
+  useWidgetKeyboardShortcuts(isFocused ?? false, shortcuts);
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('en-US', {

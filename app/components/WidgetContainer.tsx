@@ -8,9 +8,7 @@ interface WidgetContainerProps {
   widgetType: WidgetType | null; // Widget type or null for empty
   widgetProps?: Record<string, any>; // Props to pass to widget
   isFocused?: boolean; // Whether this widget is focused
-  isMouseActive?: boolean; // Whether mouse has moved recently
-  keyboardControl?: boolean; // Whether keyboard has control (prevents mouse hover from changing focus)
-  setFocusedPositionFromMouse?: (position: number | null) => void; // Function to set focus from mouse
+  setFocusedPositionFromMouse?: (position: number | null) => void; // Function to set focus from mouse click
 }
 
 // Create lazy-loaded components for each widget type
@@ -32,14 +30,17 @@ export default function WidgetContainer({
   widgetType,
   widgetProps = {},
   isFocused = false,
-  isMouseActive = false,
-  keyboardControl = false,
   setFocusedPositionFromMouse,
 }: WidgetContainerProps) {
-  const handleMouseEnter = () => {
-    // When mouse is active (has moved recently), hover can change focus
-    // The setFocusedPositionFromMouse function will check keyboardControl internally
-    if (isMouseActive && setFocusedPositionFromMouse && widgetType !== null) {
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // Focus only changes on explicit click/interaction, not hover
+    // Use mousedown instead of click for instant feedback (fires earlier in event cycle)
+    if (setFocusedPositionFromMouse && widgetType !== null) {
+      // Don't focus if clicking on interactive elements (buttons, inputs, etc.)
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
       setFocusedPositionFromMouse(position);
     }
   };
@@ -56,8 +57,9 @@ export default function WidgetContainer({
         id={`widget-${position}`}
         data-widget-position={position}
         data-focused={isFocused}
+        data-widget-container
         className="h-full min-h-0"
-        onMouseEnter={handleMouseEnter}
+        onMouseDown={handleMouseDown}
       />
     );
   }
@@ -68,8 +70,9 @@ export default function WidgetContainer({
       id={`widget-${position}`}
       data-widget-position={position}
       data-focused={isFocused}
+      data-widget-container
       className="h-full min-h-0"
-      onMouseEnter={handleMouseEnter}
+      onMouseDown={handleMouseDown}
     >
       <Suspense
         fallback={

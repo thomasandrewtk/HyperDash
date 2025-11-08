@@ -53,6 +53,12 @@ export function useKeyboardShortcuts() {
         return;
       }
 
+      // Ignore shortcuts if modifier keys are pressed (CMD/Ctrl/Alt)
+      // Shift is allowed as it's used intentionally for some shortcuts
+      if (e.metaKey || e.ctrlKey || e.altKey) {
+        return;
+      }
+
       // Ignore shortcuts if user is editing text
       if (isEditingText()) {
         return;

@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Widget from './Widget';
 import { getFromLocalStorage, saveToLocalStorage } from '@/app/lib/utils';
 import { useReactiveColors } from './ColorContext';
+import { useWidgetKeyboardShortcuts } from '@/app/lib/useWidgetKeyboardShortcuts';
 
 const STORAGE_KEY = 'hyperdash-todos';
 const SHOW_COMPLETED_KEY = 'hyperdash-show-completed';
@@ -14,6 +15,156 @@ interface Todo {
   completed: boolean;
 }
 
+interface ConfirmDialogProps {
+  onConfirm: () => void;
+  onCancel: () => void;
+  colors: {
+    primary: string;
+    secondary: string;
+    button: string;
+  };
+}
+
+// Delete confirmation dialog component
+function DeleteConfirmDialog({ onConfirm, onCancel, colors }: ConfirmDialogProps) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle Enter and Escape
+      if (e.key === 'Enter' || e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        
+        if (e.key === 'Enter') {
+          onConfirm();
+        } else {
+          onCancel();
+        }
+      }
+    };
+
+    // Use capture phase with highest priority to catch events before other handlers
+    // Attach immediately when component mounts
+    document.addEventListener('keydown', handleKeyDown, { capture: true, passive: false });
+    window.addEventListener('keydown', handleKeyDown, { capture: true, passive: false });
+    
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, { capture: true } as EventListenerOptions);
+      window.removeEventListener('keydown', handleKeyDown, { capture: true } as EventListenerOptions);
+    };
+  }, [onConfirm, onCancel]);
+
+  return (
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={(e) => {
+        // Close on backdrop click
+        if (e.target === e.currentTarget) {
+          onCancel();
+        }
+      }}
+    >
+      <div 
+        className="bg-black/90 border border-white/30 rounded-sm p-6 max-w-md w-full mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-lg font-semibold mb-4" style={{ color: colors.secondary }}>
+          Delete Todo?
+        </h3>
+        <p className="text-sm mb-6" style={{ color: colors.primary }}>
+          Are you sure you want to delete this todo? This action cannot be undone.
+        </p>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 bg-white/10 border border-white/30 rounded-sm hover:bg-white/15 transition-colors"
+            style={{ color: colors.button }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 bg-white/10 border border-white/30 rounded-sm hover:bg-white/15 transition-colors"
+            style={{ color: colors.button }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Clear completed confirmation dialog component
+function ClearConfirmDialog({ onConfirm, onCancel, colors }: ConfirmDialogProps) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle Enter and Escape
+      if (e.key === 'Enter' || e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        
+        if (e.key === 'Enter') {
+          onConfirm();
+        } else {
+          onCancel();
+        }
+      }
+    };
+
+    // Use capture phase with highest priority to catch events before other handlers
+    // Attach immediately when component mounts
+    document.addEventListener('keydown', handleKeyDown, { capture: true, passive: false });
+    window.addEventListener('keydown', handleKeyDown, { capture: true, passive: false });
+    
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, { capture: true } as EventListenerOptions);
+      window.removeEventListener('keydown', handleKeyDown, { capture: true } as EventListenerOptions);
+    };
+  }, [onConfirm, onCancel]);
+
+  return (
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      onClick={(e) => {
+        // Close on backdrop click
+        if (e.target === e.currentTarget) {
+          onCancel();
+        }
+      }}
+    >
+      <div 
+        className="bg-black/90 border border-white/30 rounded-sm p-6 max-w-md w-full mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-lg font-semibold mb-4" style={{ color: colors.secondary }}>
+          Clear All Completed?
+        </h3>
+        <p className="text-sm mb-6" style={{ color: colors.primary }}>
+          Are you sure you want to delete all completed todos? This action cannot be undone.
+        </p>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 bg-white/10 border border-white/30 rounded-sm hover:bg-white/15 transition-colors"
+            style={{ color: colors.button }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 bg-white/10 border border-white/30 rounded-sm hover:bg-white/15 transition-colors"
+            style={{ color: colors.button }}
+          >
+            Clear All
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function TodoWidget({ isFocused }: { isFocused?: boolean }) {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -22,6 +173,10 @@ export default function TodoWidget({ isFocused }: { isFocused?: boolean }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [showCompleted, setShowCompleted] = useState<boolean>(true);
+  const [selectedTodoId, setSelectedTodoId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const { colors } = useReactiveColors();
 
   useEffect(() => {
@@ -52,7 +207,7 @@ export default function TodoWidget({ isFocused }: { isFocused?: boolean }) {
         text: inputValue.trim(),
         completed: false,
       };
-      saveTodos([...todos, newTodo]);
+      saveTodos([newTodo, ...todos]); // Add new todos to the top
       setInputValue('');
     }
   };
@@ -73,15 +228,29 @@ export default function TodoWidget({ isFocused }: { isFocused?: boolean }) {
     saveTodos(todos.filter(todo => !todo.completed));
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       addTodo();
+      // Clear selection when adding new todo
+      setSelectedTodoId(null);
+    } else if (e.key === 'ArrowDown') {
+      // Move from input to first todo
+      e.preventDefault();
+      const displayTodos = getDisplayTodos();
+      const activeTodos = displayTodos.filter(todo => !todo.completed);
+      const completedTodos = showCompleted ? displayTodos.filter(todo => todo.completed) : [];
+      const visibleTodos = [...activeTodos, ...completedTodos];
+      if (visibleTodos.length > 0) {
+        setSelectedTodoId(visibleTodos[0].id);
+        inputRef.current?.blur();
+      }
     }
-  };
+  }, [addTodo, showCompleted, todos, draggedId, dragOverId]);
 
   const handleDoubleClick = (id: string, text: string) => {
     setEditingId(id);
     setEditValue(text);
+    setSelectedTodoId(null); // Clear selection when editing
   };
 
   const handleEditSave = (id: string) => {
@@ -218,7 +387,7 @@ export default function TodoWidget({ isFocused }: { isFocused?: boolean }) {
     return newTodos;
   };
 
-  // Separate todos into active and completed
+  // Separate todos into active and completed (for rendering)
   const displayTodos = getDisplayTodos();
   const activeTodos = displayTodos.filter(todo => !todo.completed);
   const completedTodos = displayTodos.filter(todo => todo.completed);
@@ -227,10 +396,226 @@ export default function TodoWidget({ isFocused }: { isFocused?: boolean }) {
     const newValue = !showCompleted;
     setShowCompleted(newValue);
     saveToLocalStorage(SHOW_COMPLETED_KEY, newValue.toString());
+    
+    // If hiding completed todos and current selection is completed, focus input
+    if (!newValue && selectedTodoId) {
+      const todo = todos.find(t => t.id === selectedTodoId);
+      if (todo && todo.completed) {
+        focusNewTodoInput();
+        setSelectedTodoId(null);
+      }
+    }
   };
 
+  // Helper functions for keyboard shortcuts
+  const focusNewTodoInput = useCallback(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  // When completed todos are hidden and selection is on a completed todo, focus input
+  useEffect(() => {
+    if (!showCompleted && selectedTodoId) {
+      const todo = todos.find(t => t.id === selectedTodoId);
+      if (todo && todo.completed) {
+        focusNewTodoInput();
+        setSelectedTodoId(null);
+      }
+    }
+  }, [showCompleted, selectedTodoId, todos, focusNewTodoInput]);
+
+  const getVisibleTodos = useCallback(() => {
+    const displayTodos = getDisplayTodos();
+    const activeTodos = displayTodos.filter(todo => !todo.completed);
+    const completedTodos = showCompleted ? displayTodos.filter(todo => todo.completed) : [];
+    return [...activeTodos, ...completedTodos];
+  }, [todos, showCompleted, draggedId, dragOverId]);
+
+  const selectNextTodo = useCallback(() => {
+    const visibleTodos = getVisibleTodos();
+    if (visibleTodos.length === 0) return;
+    
+    if (!selectedTodoId) {
+      setSelectedTodoId(visibleTodos[0].id);
+      return;
+    }
+    
+    const currentIndex = visibleTodos.findIndex(todo => todo.id === selectedTodoId);
+    const nextIndex = (currentIndex + 1) % visibleTodos.length;
+    setSelectedTodoId(visibleTodos[nextIndex].id);
+  }, [selectedTodoId, getVisibleTodos]);
+
+  const selectPreviousTodo = useCallback(() => {
+    const visibleTodos = getVisibleTodos();
+    if (visibleTodos.length === 0) return;
+    
+    if (!selectedTodoId) {
+      // If nothing is selected, go to last todo
+      setSelectedTodoId(visibleTodos[visibleTodos.length - 1].id);
+      return;
+    }
+    
+    const currentIndex = visibleTodos.findIndex(todo => todo.id === selectedTodoId);
+    
+    // If on first todo, focus input instead of cycling
+    if (currentIndex === 0) {
+      focusNewTodoInput();
+      setSelectedTodoId(null);
+      return;
+    }
+    
+    const prevIndex = currentIndex - 1;
+    setSelectedTodoId(visibleTodos[prevIndex].id);
+  }, [selectedTodoId, getVisibleTodos, focusNewTodoInput]);
+
+  const editSelectedTodo = useCallback(() => {
+    if (selectedTodoId) {
+      const todo = todos.find(t => t.id === selectedTodoId);
+      if (todo) {
+        setEditingId(selectedTodoId);
+        setEditValue(todo.text);
+      }
+    }
+  }, [selectedTodoId, todos]);
+
+  const toggleSelectedTodo = useCallback(() => {
+    if (selectedTodoId) {
+      const todo = todos.find(t => t.id === selectedTodoId);
+      if (!todo) return;
+      
+      const wasCompleted = todo.completed;
+      
+      // If completing a todo (not uncompleting), find next incomplete todo before toggle
+      if (!wasCompleted) {
+        const displayTodos = getDisplayTodos();
+        const activeTodos = displayTodos.filter(t => !t.completed);
+        const currentIndex = activeTodos.findIndex(t => t.id === selectedTodoId);
+        
+        // Toggle the todo
+        toggleTodo(selectedTodoId);
+        
+        // Move focus to next incomplete todo
+        if (currentIndex !== -1 && currentIndex < activeTodos.length - 1) {
+          // Move to next incomplete todo (index stays same since current one moves to completed)
+          setSelectedTodoId(activeTodos[currentIndex + 1].id);
+        } else {
+          // No more incomplete todos, focus input
+          focusNewTodoInput();
+          setSelectedTodoId(null);
+        }
+      } else {
+        // Uncompleting a todo - just toggle, keep focus on it
+        toggleTodo(selectedTodoId);
+      }
+    }
+  }, [selectedTodoId, todos, toggleTodo, focusNewTodoInput]);
+
+  const deleteSelectedTodo = useCallback(() => {
+    if (selectedTodoId) {
+      setShowDeleteConfirm(selectedTodoId);
+    }
+  }, [selectedTodoId]);
+
+  const confirmDeleteTodo = useCallback((id: string) => {
+    removeTodo(id);
+    setShowDeleteConfirm(null);
+    setSelectedTodoId(null);
+  }, []);
+
+  const confirmClearCompleted = useCallback(() => {
+    clearAllCompleted();
+    setShowClearConfirm(false);
+    setSelectedTodoId(null);
+  }, []);
+
+  // Widget keyboard shortcuts - only active when widget is focused
+  // Disabled when dialogs are open
+  const shortcuts = useMemo(() => {
+    const hasDialogOpen = showDeleteConfirm !== null || showClearConfirm;
+    
+    return {
+      'Escape': (_e: KeyboardEvent) => {
+        // Close confirmation dialogs first (dialogs handle their own Escape)
+        if (showDeleteConfirm) {
+          setShowDeleteConfirm(null);
+          return;
+        }
+        if (showClearConfirm) {
+          setShowClearConfirm(false);
+          return;
+        }
+        // Clear selection if no dialogs are open
+        setSelectedTodoId(null);
+      },
+      'n': (_e: KeyboardEvent) => {
+        if (hasDialogOpen) return;
+        focusNewTodoInput();
+        setSelectedTodoId(null);
+      },
+      'N': (_e: KeyboardEvent) => {
+        if (hasDialogOpen) return;
+        focusNewTodoInput();
+        setSelectedTodoId(null);
+      },
+      'c': (_e: KeyboardEvent) => {
+        if (hasDialogOpen) return;
+        toggleShowCompleted();
+      },
+      'C': (_e: KeyboardEvent) => {
+        if (hasDialogOpen) return;
+        toggleShowCompleted();
+      },
+      'x': (_e: KeyboardEvent) => {
+        if (hasDialogOpen) return;
+        const hasCompleted = todos.some(todo => todo.completed);
+        if (hasCompleted) {
+          setShowClearConfirm(true);
+        }
+      },
+      'X': (_e: KeyboardEvent) => {
+        if (hasDialogOpen) return;
+        const hasCompleted = todos.some(todo => todo.completed);
+        if (hasCompleted) {
+          setShowClearConfirm(true);
+        }
+      },
+      'ArrowDown': (_e: KeyboardEvent) => {
+        if (hasDialogOpen) return;
+        selectNextTodo();
+      },
+      'ArrowUp': (_e: KeyboardEvent) => {
+        if (hasDialogOpen) return;
+        selectPreviousTodo();
+      },
+      'Enter': (_e: KeyboardEvent) => {
+        if (hasDialogOpen) return;
+        if (selectedTodoId && !editingId) {
+          editSelectedTodo();
+        } else if (!selectedTodoId) {
+          // If no todo is selected, focus the input
+          focusNewTodoInput();
+        }
+      },
+      ' ': (_e: KeyboardEvent) => {
+        if (hasDialogOpen) return;
+        if (selectedTodoId && !editingId) {
+          toggleSelectedTodo();
+        }
+      },
+      'Backspace': (_e: KeyboardEvent) => {
+        if (hasDialogOpen) return;
+        if (selectedTodoId && !editingId) {
+          deleteSelectedTodo();
+        }
+      },
+    };
+  }, [focusNewTodoInput, toggleShowCompleted, todos, selectNextTodo, selectPreviousTodo, selectedTodoId, editingId, editSelectedTodo, toggleSelectedTodo, deleteSelectedTodo, showDeleteConfirm, showClearConfirm]);
+
+  useWidgetKeyboardShortcuts(isFocused ?? false, shortcuts);
+
   // Render a single todo item
-  const renderTodoItem = (todo: Todo) => (
+  const renderTodoItem = (todo: Todo) => {
+    const isSelected = selectedTodoId === todo.id && !editingId;
+    return (
     <div
       key={todo.id}
       draggable={editingId !== todo.id}
@@ -239,6 +624,17 @@ export default function TodoWidget({ isFocused }: { isFocused?: boolean }) {
       onDragLeave={handleDragLeave}
       onDrop={(e) => handleDrop(e, todo.id)}
       onDragEnd={handleDragEnd}
+      onClick={(e) => {
+        // Only select if clicking on the todo item itself, not on interactive elements
+        const target = e.target as HTMLElement;
+        if (!editingId && 
+            target.tagName !== 'INPUT' && 
+            target.tagName !== 'BUTTON' &&
+            !target.closest('button') &&
+            !target.closest('input')) {
+          setSelectedTodoId(todo.id);
+        }
+      }}
       className={`
         flex items-center gap-2
         p-2
@@ -246,11 +642,14 @@ export default function TodoWidget({ isFocused }: { isFocused?: boolean }) {
         border rounded-sm
         transition-all duration-200
         ${editingId === todo.id ? 'cursor-default' : 'cursor-move'}
+        ${isSelected ? 'border-white/50 bg-black/20' : ''}
         ${draggedId === todo.id 
           ? 'border-white/50 shadow-lg' 
           : dragOverId === todo.id && draggedId 
             ? 'border-white/40' 
-            : 'border-white/10 hover:border-white/30'
+            : isSelected
+              ? 'border-white/50'
+              : 'border-white/10 hover:border-white/30'
         }
       `}
       style={{
@@ -367,17 +766,21 @@ export default function TodoWidget({ isFocused }: { isFocused?: boolean }) {
         </button>
       )}
     </div>
-  );
+    );
+  };
 
   return (
     <Widget title="Todo List" isFocused={isFocused}>
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <div className="flex gap-2 flex-shrink-0 mb-3">
           <input
+            ref={inputRef}
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
+            onClick={() => setSelectedTodoId(null)}
+            onFocus={() => setSelectedTodoId(null)}
             placeholder="Add a todo..."
             className="
               flex-1
@@ -501,6 +904,23 @@ export default function TodoWidget({ isFocused }: { isFocused?: boolean }) {
             )}
           </div>
         </div>
+        
+        {/* Confirmation Dialogs */}
+        {showDeleteConfirm && (
+          <DeleteConfirmDialog
+            onConfirm={() => confirmDeleteTodo(showDeleteConfirm)}
+            onCancel={() => setShowDeleteConfirm(null)}
+            colors={colors}
+          />
+        )}
+        
+        {showClearConfirm && (
+          <ClearConfirmDialog
+            onConfirm={confirmClearCompleted}
+            onCancel={() => setShowClearConfirm(false)}
+            colors={colors}
+          />
+        )}
       </div>
     </Widget>
   );

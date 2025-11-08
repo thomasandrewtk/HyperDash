@@ -17,7 +17,7 @@ import { useKeyboardShortcuts } from '@/app/lib/useKeyboardShortcuts';
 
 function DashboardContent() {
   const { isReady: colorsReady } = useReactiveColors();
-  const { focusedPosition, isMouseActive, keyboardControl, setFocusedPositionFromMouse } = useFocus();
+  const { focusedPosition, setFocusedPositionFromMouse } = useFocus();
   // Initialize global keyboard shortcuts (after useFocus to ensure context is available)
   useKeyboardShortcuts();
   const [wallpaper, setWallpaper] = useState<string | null>(null);
@@ -119,8 +119,6 @@ function DashboardContent() {
                 widgetType={slot.widgetType}
                 widgetProps={getWidgetProps(slot.widgetType, slot.position)}
                 isFocused={focusedPosition === slot.position}
-                isMouseActive={isMouseActive}
-                keyboardControl={keyboardControl}
                 setFocusedPositionFromMouse={setFocusedPositionFromMouse}
               />
             ))}
@@ -135,8 +133,6 @@ function DashboardContent() {
                 widgetType={slot.widgetType}
                 widgetProps={getWidgetProps(slot.widgetType, slot.position)}
                 isFocused={focusedPosition === slot.position}
-                isMouseActive={isMouseActive}
-                keyboardControl={keyboardControl}
                 setFocusedPositionFromMouse={setFocusedPositionFromMouse}
               />
             ))}
