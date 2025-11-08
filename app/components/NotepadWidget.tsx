@@ -33,7 +33,7 @@ interface ImageControl {
   rect: DOMRect;
 }
 
-export default function NotepadWidget() {
+export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
   const [tabs, setTabs] = useState<NotepadTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [editingTabId, setEditingTabId] = useState<string | null>(null);
@@ -853,7 +853,7 @@ export default function NotepadWidget() {
   }, [activeTabId]);
 
   return (
-    <Widget title="Notepad">
+    <Widget title="Notepad" isFocused={isFocused}>
       <div className="flex flex-col h-full min-h-0 gap-2 relative">
         {/* Chrome-style Tabs */}
         <div 

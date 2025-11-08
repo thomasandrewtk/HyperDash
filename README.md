@@ -38,6 +38,11 @@ Your reactive personal dashboard. Built with Next.js, TypeScript, and Tailwind C
   - Data export/import functionality
   - Clear all data option
 - **Keyboard Shortcuts**: Global shortcuts for quick access to common actions
+- **Widget Focus System**: Hyprland-inspired focus navigation with mouse and keyboard control
+  - Visual highlighting of focused widgets
+  - Keyboard shortcuts for direct widget access (1-9 keys) and cycling (Tab/Shift+Tab)
+  - Intelligent precedence: keyboard takes control, mouse hover resumes after timeout
+  - Focus follows cursor or keyboard naturally
 
 ## Getting Started
 
@@ -150,11 +155,34 @@ HyperDash includes global keyboard shortcuts for quick access to common actions:
 - **`Shift + E`** - Export Data
 - **`Shift + I`** - Import Data
 
+### Widget Focus Navigation
+
+HyperDash features a **Hyprland-inspired focus system** for keyboard-driven widget navigation:
+
+- **`1-9`** - Focus widget at position (1 = top-left, 2 = top-middle, etc.)
+- **`Tab`** - Cycle focus forward (left-to-right, top-to-bottom, wraps around)
+- **`Shift + Tab`** - Cycle focus backward (right-to-left, bottom-to-top, wraps around)
+
+**Focus Behavior:**
+- **Dual Control**: Both keyboard and mouse hover can control focus
+- **Smart Precedence**: When you use keyboard navigation, mouse hover is temporarily disabled (2-second timeout)
+- **Visual Feedback**: Focused widgets are highlighted with enhanced border, shadow, and slight upward lift
+- **Natural Recovery**: After 2 seconds of no keyboard input, mouse hover control automatically resumes
+- **Empty Slot Skipping**: Tab cycling automatically skips empty widget slots
+- **No Persistence**: Focus state resets on page reload
+
+**Example Workflow:**
+1. Press `1` to focus Clock widget → keyboard takes control, mouse hover disabled
+2. Press `Tab` to cycle to Weather widget → still in keyboard mode
+3. Wait 2 seconds or move mouse → mouse hover control resumes
+4. Hover over Notepad widget → mouse takes control, widget highlights
+
 ### Notes
 
 - Shortcuts are **disabled when editing text** (typing in inputs, textareas, or contenteditable elements) to prevent accidental triggers
 - **`Esc` always works** even when editing text, allowing you to quickly defocus and close modals
 - All shortcuts work globally across the dashboard, regardless of which widget is visible
+- Focus shortcuts respect the position-based layout system (positions 1-5 in current 3+2 layout)
 
 ## License
 

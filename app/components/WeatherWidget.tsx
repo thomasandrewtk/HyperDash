@@ -65,7 +65,7 @@ const getWeatherCondition = (code: number): string => {
   return conditions[code] || 'Unknown';
 };
 
-export default function WeatherWidget({ onLoadComplete }: { onLoadComplete?: () => void }) {
+export default function WeatherWidget({ onLoadComplete, isFocused }: { onLoadComplete?: () => void; isFocused?: boolean }) {
   const { colors } = useReactiveColors();
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -187,7 +187,7 @@ export default function WeatherWidget({ onLoadComplete }: { onLoadComplete?: () 
 
   if (loading) {
     return (
-      <Widget title="Weather">
+      <Widget title="Weather" isFocused={isFocused}>
         <p style={{ color: colors.secondary }}>Loading weather...</p>
       </Widget>
     );
@@ -195,7 +195,7 @@ export default function WeatherWidget({ onLoadComplete }: { onLoadComplete?: () 
 
   if (error || !weather) {
     return (
-      <Widget title="Weather">
+      <Widget title="Weather" isFocused={isFocused}>
         <p className="text-sm" style={{ color: colors.secondary }}>
           {error || 'Unable to fetch weather'}
         </p>
@@ -207,7 +207,7 @@ export default function WeatherWidget({ onLoadComplete }: { onLoadComplete?: () 
   }
 
   return (
-    <Widget title="Weather">
+    <Widget title="Weather" isFocused={isFocused}>
       <div className="space-y-3 flex flex-col h-full">
         {/* Main Weather Display */}
         <div className="space-y-2 flex-shrink-0">

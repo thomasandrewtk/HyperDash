@@ -5,6 +5,7 @@ import LoadingScreen from './LoadingScreen';
 import Image from 'next/image';
 import { getFromLocalStorage } from '@/app/lib/utils';
 import { ColorProvider, useReactiveColors } from './ColorContext';
+import { FocusProvider, useFocus } from './FocusContext';
 import WidgetContainer from './WidgetContainer';
 import {
   getWidgetConfiguration,
@@ -15,9 +16,10 @@ import { WidgetType } from '@/app/lib/widgetRegistry';
 import { useKeyboardShortcuts } from '@/app/lib/useKeyboardShortcuts';
 
 function DashboardContent() {
-  // Initialize global keyboard shortcuts
-  useKeyboardShortcuts();
   const { isReady: colorsReady } = useReactiveColors();
+  const { focusedPosition, isMouseActive, keyboardControl, setFocusedPositionFromMouse } = useFocus();
+  // Initialize global keyboard shortcuts (after useFocus to ensure context is available)
+  useKeyboardShortcuts();
   const [wallpaper, setWallpaper] = useState<string | null>(null);
   const [wallpaperReady, setWallpaperReady] = useState(false);
   const [weatherReady, setWeatherReady] = useState(false);
@@ -116,6 +118,10 @@ function DashboardContent() {
                 position={slot.position}
                 widgetType={slot.widgetType}
                 widgetProps={getWidgetProps(slot.widgetType, slot.position)}
+                isFocused={focusedPosition === slot.position}
+                isMouseActive={isMouseActive}
+                keyboardControl={keyboardControl}
+                setFocusedPositionFromMouse={setFocusedPositionFromMouse}
               />
             ))}
           </div>
@@ -128,6 +134,10 @@ function DashboardContent() {
                 position={slot.position}
                 widgetType={slot.widgetType}
                 widgetProps={getWidgetProps(slot.widgetType, slot.position)}
+                isFocused={focusedPosition === slot.position}
+                isMouseActive={isMouseActive}
+                keyboardControl={keyboardControl}
+                setFocusedPositionFromMouse={setFocusedPositionFromMouse}
               />
             ))}
           </div>
@@ -140,7 +150,9 @@ function DashboardContent() {
 export default function Dashboard() {
   return (
     <ColorProvider>
-      <DashboardContent />
+      <FocusProvider>
+        <DashboardContent />
+      </FocusProvider>
     </ColorProvider>
   );
 }

@@ -14,7 +14,7 @@ interface Todo {
   completed: boolean;
 }
 
-export default function TodoWidget() {
+export default function TodoWidget({ isFocused }: { isFocused?: boolean }) {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -370,7 +370,7 @@ export default function TodoWidget() {
   );
 
   return (
-    <Widget title="Todo List">
+    <Widget title="Todo List" isFocused={isFocused}>
       <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
         <div className="flex gap-2 flex-shrink-0 mb-3">
           <input

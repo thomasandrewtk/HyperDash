@@ -107,3 +107,53 @@ export function getLayoutSlots(config: WidgetConfiguration): {
   return { topRow, bottomRow };
 }
 
+/**
+ * Get array of focusable widget positions (positions with widgets, sorted)
+ * Skips empty slots (widgetType === null)
+ */
+export function getFocusablePositions(config: WidgetConfiguration): number[] {
+  return config
+    .filter((slot) => slot.widgetType !== null)
+    .map((slot) => slot.position)
+    .sort((a, b) => a - b);
+}
+
+/**
+ * Get next focusable position in the given direction
+ * Wraps around: last → first (forward), first → last (backward)
+ * Returns first focusable position if current is null
+ */
+export function getNextFocusPosition(
+  current: number | null,
+  config: WidgetConfiguration,
+  direction: 'forward' | 'backward'
+): number | null {
+  const focusablePositions = getFocusablePositions(config);
+  
+  if (focusablePositions.length === 0) {
+    return null;
+  }
+  
+  // If no current focus, return first position
+  if (current === null) {
+    return focusablePositions[0];
+  }
+  
+  const currentIndex = focusablePositions.indexOf(current);
+  
+  // If current position not found, return first position
+  if (currentIndex === -1) {
+    return focusablePositions[0];
+  }
+  
+  if (direction === 'forward') {
+    // Move to next position, wrap to first if at end
+    const nextIndex = (currentIndex + 1) % focusablePositions.length;
+    return focusablePositions[nextIndex];
+  } else {
+    // Move to previous position, wrap to last if at start
+    const prevIndex = currentIndex === 0 ? focusablePositions.length - 1 : currentIndex - 1;
+    return focusablePositions[prevIndex];
+  }
+}
+

@@ -2,31 +2,34 @@
 
 import React from 'react';
 import { useReactiveColors } from './ColorContext';
+import { useFocus } from './FocusContext';
 
 interface WidgetProps {
   title?: string;
   children: React.ReactNode;
   className?: string;
+  isFocused?: boolean; // Whether this widget is focused
 }
 
 export default function Widget({ 
   title, 
   children, 
-  className = '' 
+  className = '',
+  isFocused = false,
 }: WidgetProps) {
   const { colors } = useReactiveColors();
+  // Read keyboardControl directly from context - no need to pass through every layer
+  const { keyboardControl } = useFocus();
 
   return (
     <div 
       className={`
         bg-black/40 backdrop-blur-xl
-        border-[1px] border-white/20
+        border-[1px] ${isFocused ? 'border-white/50' : 'border-white/20'}
         rounded-sm
         p-4
-        shadow-lg
-        hover:shadow-xl
-        hover:border-white/50
-        hover:-translate-y-[1px]
+        ${isFocused ? 'shadow-xl -translate-y-[1px]' : 'shadow-lg'}
+        ${!keyboardControl ? 'hover:shadow-xl hover:border-white/50 hover:-translate-y-[1px]' : ''}
         transition-all duration-300
         relative
         h-full

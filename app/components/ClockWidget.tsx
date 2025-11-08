@@ -11,7 +11,7 @@ const WORK_DURATION = 25 * 60; // 25 minutes in seconds
 const SHORT_BREAK_DURATION = 5 * 60; // 5 minutes in seconds
 const LONG_BREAK_DURATION = 15 * 60; // 15 minutes in seconds
 
-export default function ClockWidget() {
+export default function ClockWidget({ isFocused }: { isFocused?: boolean }) {
   const [time, setTime] = useState(new Date());
   const { colors } = useReactiveColors();
   const [clockFormat, setClockFormat] = useState<'12h' | '24h'>(() => {
@@ -301,7 +301,7 @@ export default function ClockWidget() {
 
 
   return (
-    <Widget title="Clock">
+    <Widget title="Clock" isFocused={isFocused}>
       <div className="space-y-4 flex flex-col h-full">
         {/* Clock Section */}
         <div className="space-y-3 flex-shrink-0">

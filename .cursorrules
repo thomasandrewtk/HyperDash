@@ -340,25 +340,234 @@ All widgets use the base `Widget` component:
 4. Hover: `bg-white/15`, `border-white/50`
 5. Include subtle shadows
 
+## Widget Focus System
+
+### Hyprland-Style Focus Architecture
+
+HyperDash implements a **Hyprland-inspired focus system** where both mouse and keyboard can control widget focus, with intelligent precedence handling:
+
+**Key Characteristics:**
+- **Visual Highlighting**: Focused widgets display same visual style as hover (border-white/50, upward lift, enhanced shadow)
+- **Dual Input Control**: Both keyboard shortcuts and mouse hover can control focus
+- **Smart Precedence**: Keyboard input takes priority, mouse hover is disabled during keyboard control
+- **Automatic Recovery**: Mouse hover re-enables after keyboard control timeout (2 seconds)
+- **No Persistence**: Focus state does not persist across page reloads
+- **Skip Empty Slots**: Tab cycling automatically skips empty widget slots
+
+### Focus Context (`app/components/FocusContext.tsx`)
+
+**Purpose**: Centralized React Context for managing global focus state across the dashboard.
+
+**State Management:**
+- `focusedPosition: number | null` - Currently focused widget position (1-5, or null if none)
+- `isMouseActive: boolean` - Tracks recent mouse movement (debounced, 100ms)
+- `keyboardControl: boolean` - True when keyboard has been used recently (2-second timeout)
+
+**Key Functions:**
+- `setFocusedPositionFromKeyboard(position)` - Sets focus via keyboard, asserts keyboard control, disables mouse
+- `setFocusedPositionFromMouse(position)` - Sets focus via mouse, only if keyboard control is not active
+- `setMouseActive(active)` - Manually set mouse activity state
+- `setKeyboardControl(control)` - Manually set keyboard control state
+
+**Mouse Activity Detection:**
+- Global `mousemove` listener with 100ms debounce
+- `isMouseActive` becomes false after 100ms of stillness
+- Automatically updates when mouse moves or becomes still
+
+**Keyboard Control Timeout:**
+- When keyboard navigation is used, `keyboardControl` is set to true
+- After 2 seconds of no keyboard input, `keyboardControl` automatically resets to false
+- This allows mouse hover to resume control naturally
+
+**Implementation Pattern:**
+```tsx
+// In FocusContext.tsx
+const setFocusedPositionFromKeyboard = useCallback((position: number | null) => {
+  setFocusedPosition(position);
+  setMouseActive(false);
+  setKeyboardControlWithTimeout(true); // Sets keyboard control with 2-second auto-reset
+}, [setKeyboardControlWithTimeout]);
+
+const setFocusedPositionFromMouse = useCallback((position: number | null) => {
+  // Only allow mouse to change focus if keyboard doesn't have control
+  if (!keyboardControl) {
+    setFocusedPosition(position);
+    setKeyboardControlWithTimeout(false);
+  }
+}, [keyboardControl, setKeyboardControlWithTimeout]);
+```
+
+### Focus Integration with Widget Architecture
+
+**Dashboard Layer** (`app/components/Dashboard.tsx`):
+- Wrapped with `<FocusProvider>` to provide focus context to all children
+- Consumes focus context via `useFocus()` hook
+- Passes `isFocused`, `isMouseActive`, `keyboardControl`, and `setFocusedPositionFromMouse` to WidgetContainer components
+- Each widget receives `isFocused={focusedPosition === slot.position}` prop
+
+**Widget Container Layer** (`app/components/WidgetContainer.tsx`):
+- Receives focus-related props from Dashboard
+- Handles `onMouseEnter` event to call `setFocusedPositionFromMouse(position)`
+- Mouse focus only applies if keyboard control is not active (handled by FocusContext)
+- Passes `isFocused` prop down to lazy-loaded widget components
+
+**Widget Layer** (`app/components/Widget.tsx`):
+- Base `Widget` component consumes `keyboardControl` directly from `useFocus()` hook
+- Individual widget components receive and pass `isFocused` prop to base `Widget`
+- **Architectural Principle**: Individual widgets only know "Am I Focused?" - they don't manage focus logic
+- Base `Widget` applies focus styling when `isFocused` is true:
+  - Border: `border-white/50`
+  - Shadow: `shadow-xl`
+  - Transform: `-translate-y-[1px]`
+- Base `Widget` conditionally disables hover effects when `keyboardControl` is true:
+  - Prevents visual "double focus" when keyboard has control
+  - Hover effects only apply when mouse is in control
+
+### Focus Keyboard Shortcuts
+
+**Implemented in** `app/lib/useKeyboardShortcuts.ts`:
+
+- **`1-9` Keys**: Switch focus directly to widget at that position
+  - Position 1 = first widget (top-left)
+  - Position 2 = second widget (top-middle)
+  - Etc. (follows left-to-right, top-to-bottom order)
+  - Only switches to positions with assigned widgets (skips empty slots)
+  
+- **`Tab` Key**: Cycle focus forward through widgets
+  - Moves to next focusable widget position
+  - Wraps around: last position → first position
+  - Automatically skips empty slots
+  - `e.preventDefault()` blocks default browser Tab behavior
+  
+- **`Shift + Tab`**: Cycle focus backward through widgets
+  - Moves to previous focusable widget position
+  - Wraps around: first position → last position
+  - Automatically skips empty slots
+  - `e.preventDefault()` blocks default browser Tab behavior
+
+**Shortcut Behavior:**
+- Focus shortcuts are **disabled when editing text** (inputs, textareas, contenteditable)
+- Same pattern as existing global shortcuts (Settings, Wallpaper Upload, etc.)
+- All focus shortcuts call `setFocusedPositionFromKeyboard()` to assert keyboard control
+- Keyboard control automatically disables mouse hover for 2 seconds
+
+**Implementation Details:**
+```tsx
+// Example: Tab key handler
+if (e.key === 'Tab' && !e.shiftKey) {
+  e.preventDefault();
+  e.stopPropagation();
+  const config = getWidgetConfiguration();
+  const nextPosition = getNextFocusPosition(focusedPosition, config, 'forward');
+  if (nextPosition !== null) {
+    setFocusedPositionFromKeyboard(nextPosition); // Asserts keyboard control
+  }
+  return;
+}
+```
+
+### Focus Helper Functions
+
+**In `app/lib/widgetConfig.ts`:**
+
+- `getFocusablePositions(config: WidgetConfiguration): number[]`
+  - Filters out empty slots (widgetType === null)
+  - Returns sorted array of focusable positions
+  - Used for Tab cycling and position validation
+
+- `getNextFocusPosition(current: number | null, config: WidgetConfiguration, direction: 'forward' | 'backward'): number | null`
+  - Calculates next/previous focusable position for Tab cycling
+  - Direction: 'forward' for Tab, 'backward' for Shift+Tab
+  - Handles wrapping: forward wraps to start, backward wraps to end
+  - Returns null if no focusable positions exist
+  - Automatically skips empty slots
+
+**Example Pattern:**
+```tsx
+const focusablePositions = getFocusablePositions(config); // [1, 2, 3, 4, 5]
+const nextPosition = getNextFocusPosition(3, config, 'forward'); // Returns 4
+const prevPosition = getNextFocusPosition(1, config, 'backward'); // Returns 5 (wrap around)
+```
+
+### Focus Visual Styling Rules
+
+**Focused Widget Styling:**
+- Same visual appearance as hover state for consistency
+- Border: `border-white/50` (more visible than default `border-white/20`)
+- Shadow: `shadow-xl` (enhanced shadow)
+- Transform: `-translate-y-[1px]` (subtle upward lift)
+- Smooth 300ms transition for all properties
+
+**Hover vs. Keyboard Control:**
+- When `keyboardControl` is true, hover effects are disabled
+- This prevents two widgets from appearing focused simultaneously
+- When mouse hovers over a widget while keyboard has control, no visual feedback
+- After 2-second timeout, keyboard control expires and hover effects resume
+
+**Conditional Hover Classes in Widget.tsx:**
+```tsx
+className={`
+  // ... other classes
+  ${!keyboardControl ? 'hover:shadow-xl hover:border-white/50 hover:-translate-y-[1px]' : ''}
+  // ... other classes
+`}
+```
+
+### Focus System Architecture Principles
+
+1. **Centralized Logic**: Focus state and logic are managed in Dashboard/Container layers, not in individual widgets
+2. **Widget Simplicity**: Individual widgets only receive and pass `isFocused` prop - they don't know about focus management
+3. **Base Component Styling**: Base `Widget` component handles all focus styling and hover behavior
+4. **Context-Based**: `FocusContext` provides global state accessible anywhere in the tree
+5. **Smart Precedence**: Keyboard input always takes priority over mouse input, with automatic timeout recovery
+6. **No Persistence**: Focus state is ephemeral and doesn't persist across page reloads
+7. **Accessibility**: Focus cycling (Tab/Shift+Tab) follows logical left-to-right, top-to-bottom order
+
+### Adding Focus Support to New Widgets
+
+When creating new widgets, follow these steps for focus integration:
+
+1. **Widget Component**: Accept `isFocused?: boolean` prop in widget's props interface
+2. **Pass to Base Widget**: Pass `isFocused` to the base `<Widget>` component
+3. **No Additional Logic**: Do NOT add focus management logic to individual widgets
+4. **That's It**: The base `Widget` component and `FocusContext` handle everything else
+
+**Example:**
+```tsx
+interface MyNewWidgetProps {
+  isFocused?: boolean;
+}
+
+export default function MyNewWidget({ isFocused }: MyNewWidgetProps) {
+  return (
+    <Widget title="My New Widget" isFocused={isFocused}>
+      {/* Widget content */}
+    </Widget>
+  );
+}
+```
+
 ## File Structure
 ```
 app/
   components/
-    Widget.tsx          # Base widget component
-    Dashboard.tsx       # Main layout, manages widget configuration
-    WidgetContainer.tsx # Container component for lazy loading widgets
+    Widget.tsx          # Base widget component with focus styling
+    Dashboard.tsx       # Main layout, manages widget configuration and focus
+    WidgetContainer.tsx # Container component for lazy loading widgets and focus events
     ColorContext.tsx    # Reactive color context provider
+    FocusContext.tsx    # Global focus state management (Hyprland-style)
     ClockWidget.tsx
     WeatherWidget.tsx
     SystemInfoWidget.tsx
     TodoWidget.tsx
     NotepadWidget.tsx
   lib/
-    widgetRegistry.ts   # Widget type definitions and dynamic import registry
-    widgetConfig.ts     # Widget configuration management and layout helpers
-    utils.ts            # localStorage helpers
-    colorUtils.ts       # Wallpaper analysis and color calculation
-  globals.css           # Global styles, scrollbar, CSS custom properties
+    widgetRegistry.ts      # Widget type definitions and dynamic import registry
+    widgetConfig.ts        # Widget configuration management and focus helpers
+    utils.ts               # localStorage helpers
+    colorUtils.ts          # Wallpaper analysis and color calculation
+    useKeyboardShortcuts.ts # Global keyboard shortcuts including focus navigation
+  globals.css              # Global styles, scrollbar, CSS custom properties
 ```
 
 ## Key Principles
@@ -427,13 +636,14 @@ When adding new widgets, follow this complete process:
 1. Create new widget file: `app/components/[WidgetName]Widget.tsx`
 2. Use the base `Widget` component (no `borderColor` prop)
 3. Follow the unified white border scheme
-4. **Import and use `useReactiveColors()` hook** to access dynamic colors
-5. Apply colors via inline styles: `style={{ color: colors.primary }}`
-6. **NEVER use hardcoded Tailwind green classes** (text-green-300, etc.)
-7. Ensure proper height constraints for scrolling if needed
-8. Match button and input styling patterns
-9. Test hover states for visibility
-10. Placeholder colors are handled automatically via CSS
+4. **Accept and pass `isFocused?: boolean` prop** to base `Widget` component for focus support
+5. **Import and use `useReactiveColors()` hook** to access dynamic colors
+6. Apply colors via inline styles: `style={{ color: colors.primary }}`
+7. **NEVER use hardcoded Tailwind green classes** (text-green-300, etc.)
+8. Ensure proper height constraints for scrolling if needed
+9. Match button and input styling patterns
+10. Test hover states for visibility
+11. Placeholder colors are handled automatically via CSS
 
 ### Step 2: Register Widget Type
 1. Open `app/lib/widgetRegistry.ts`
@@ -473,6 +683,7 @@ When adding new widgets, follow this complete process:
 - [ ] Dynamic import added to `widgetComponents` in `widgetRegistry.ts`
 - [ ] Lazy import added to `lazyWidgets` in `WidgetContainer.tsx`
 - [ ] Widget uses base `Widget` component
+- [ ] Widget accepts and passes `isFocused?: boolean` prop to base `Widget` component
 - [ ] Widget uses `useReactiveColors()` hook for colors
 - [ ] No hardcoded Tailwind green color classes
 - [ ] Proper height constraints for scrolling if needed

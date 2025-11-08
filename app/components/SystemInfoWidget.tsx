@@ -12,7 +12,7 @@ interface SystemInfo {
   uptime: string;
 }
 
-export default function SystemInfoWidget() {
+export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean }) {
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [startTime] = useState(Date.now());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -258,7 +258,7 @@ export default function SystemInfoWidget() {
 
   if (!info) {
     return (
-      <Widget title="System Info">
+      <Widget title="System Info" isFocused={isFocused}>
         <p style={{ color: colors.secondary }}>Loading...</p>
       </Widget>
     );
@@ -275,7 +275,7 @@ export default function SystemInfoWidget() {
         onChange={handleWallpaperUpload}
         className="hidden"
       />
-      <Widget title="System Info">
+      <Widget title="System Info" isFocused={isFocused}>
         <div className="flex-1 flex flex-col">
           <div className="space-y-2 text-xs flex-1">
             <div className="flex justify-between border-b border-white/10 pb-1">

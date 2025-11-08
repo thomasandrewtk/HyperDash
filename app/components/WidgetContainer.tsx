@@ -7,6 +7,10 @@ interface WidgetContainerProps {
   position: number; // Position slot number (1-5)
   widgetType: WidgetType | null; // Widget type or null for empty
   widgetProps?: Record<string, any>; // Props to pass to widget
+  isFocused?: boolean; // Whether this widget is focused
+  isMouseActive?: boolean; // Whether mouse has moved recently
+  keyboardControl?: boolean; // Whether keyboard has control (prevents mouse hover from changing focus)
+  setFocusedPositionFromMouse?: (position: number | null) => void; // Function to set focus from mouse
 }
 
 // Create lazy-loaded components for each widget type
@@ -27,7 +31,18 @@ export default function WidgetContainer({
   position,
   widgetType,
   widgetProps = {},
+  isFocused = false,
+  isMouseActive = false,
+  keyboardControl = false,
+  setFocusedPositionFromMouse,
 }: WidgetContainerProps) {
+  const handleMouseEnter = () => {
+    // When mouse is active (has moved recently), hover can change focus
+    // The setFocusedPositionFromMouse function will check keyboardControl internally
+    if (isMouseActive && setFocusedPositionFromMouse && widgetType !== null) {
+      setFocusedPositionFromMouse(position);
+    }
+  };
   // Get the lazy component for this widget type
   const LazyWidget = useMemo(() => {
     if (!widgetType) return null;
@@ -40,7 +55,9 @@ export default function WidgetContainer({
       <div
         id={`widget-${position}`}
         data-widget-position={position}
+        data-focused={isFocused}
         className="h-full"
+        onMouseEnter={handleMouseEnter}
       />
     );
   }
@@ -50,7 +67,9 @@ export default function WidgetContainer({
     <div
       id={`widget-${position}`}
       data-widget-position={position}
+      data-focused={isFocused}
       className="h-full"
+      onMouseEnter={handleMouseEnter}
     >
       <Suspense
         fallback={
@@ -59,7 +78,7 @@ export default function WidgetContainer({
           </div>
         }
       >
-        <LazyWidget {...widgetProps} />
+        <LazyWidget {...widgetProps} isFocused={isFocused} />
       </Suspense>
     </div>
   );
