@@ -36,7 +36,7 @@ function isEditingText(): boolean {
 
 /**
  * Custom hook that manages global keyboard shortcuts
- * Shortcuts are disabled when user is editing text (except Esc)
+ * Shortcuts are disabled when user is editing text (except Tab navigation and Esc)
  * Focus shortcuts are disabled when mouse is active
  */
 export function useKeyboardShortcuts() {
@@ -59,42 +59,43 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Ignore shortcuts if user is editing text
-      if (isEditingText()) {
-        return;
-      }
+      const editingText = isEditingText();
+      const activeElement = editingText ? document.activeElement : null;
+      const editableElement =
+        activeElement instanceof HTMLElement ? activeElement : null;
+
+      const cycleFocus = (direction: 'forward' | 'backward') => {
+        e.preventDefault();
+        e.stopPropagation();
+        editableElement?.blur();
+        try {
+          const config = getWidgetConfiguration();
+          const nextPosition = getNextFocusPosition(focusedPosition, config, direction);
+          if (nextPosition !== null) {
+            setFocusedPositionFromKeyboard(nextPosition);
+          }
+        } catch (error) {
+          const label = direction === 'forward' ? 'Tab' : 'Shift+Tab';
+          console.error(`Error handling ${label} key:`, error);
+        }
+      };
 
       // Handle focus navigation shortcuts
       // These always work - pressing a key gives keyboard control
       // Tab - Cycle forward through widgets
       if (e.key === 'Tab' && !e.shiftKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        try {
-          const config = getWidgetConfiguration();
-          const nextPosition = getNextFocusPosition(focusedPosition, config, 'forward');
-          if (nextPosition !== null) {
-            setFocusedPositionFromKeyboard(nextPosition);
-          }
-        } catch (error) {
-          console.error('Error handling Tab key:', error);
-        }
+        cycleFocus('forward');
         return;
       }
 
       // Shift + Tab - Cycle backward through widgets
       if (e.key === 'Tab' && e.shiftKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        try {
-          const config = getWidgetConfiguration();
-          const nextPosition = getNextFocusPosition(focusedPosition, config, 'backward');
-          if (nextPosition !== null) {
-            setFocusedPositionFromKeyboard(nextPosition);
-          }
-        } catch (error) {
-          console.error('Error handling Shift+Tab key:', error);
-        }
+        cycleFocus('backward');
+        return;
+      }
+
+      // Ignore other shortcuts if user is editing text
+      if (editingText) {
         return;
       }
 
