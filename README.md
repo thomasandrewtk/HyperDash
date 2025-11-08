@@ -12,9 +12,15 @@ Your reactive personal dashboard. Built with Next.js, TypeScript, and Tailwind C
   - Custom wallpaper support with automatic color adaptation
   - Text colors dynamically adjust based on wallpaper brightness for optimal contrast
   - Unified white/neutral borders that adapt to any background
+- **Modular Widget System**: Three-layer architecture with dynamic loading and code splitting
+  - Configurable widget positions (currently 5 slots, expandable)
+  - Widgets are lazy-loaded and code-split for optimal performance
+  - Widget configuration persists in localStorage
 - **Tiling Layout**: CSS Grid-based layout with responsive design
-  - Top row: Clock, Weather, System Info (33.33% height)
-  - Bottom row: Todo List, Notepad (66.66% height, 50/50 split)
+  - Position-based system: Widgets assigned positions 1-5 (left-to-right, top-to-bottom)
+  - Default layout: Top row (positions 1-3): Clock, Weather, System Info (33.33% height)
+  - Bottom row (positions 4-5): Todo List, Notepad (66.66% height, 50/50 split)
+  - Layout is configurable and will support full customization via UI in the future
 - **Modern Aesthetic**: Dark theme with semi-transparent widgets, backdrop blur, and monospace fonts
 - **Interactive Widgets**:
   - **Clock**: Real-time clock with date display, 12h/24h format toggle
@@ -75,9 +81,53 @@ The weather widget uses the **Open-Meteo API** (free, no API key required):
 - Updates every 10 minutes automatically
 - Works without any configuration or API keys
 
+## Modular Widget System
+
+HyperDash uses a **three-layer modular architecture** for widgets:
+
+### Architecture Layers
+
+1. **Dashboard Layer**: Manages widget configuration, loads from localStorage, calculates layout
+2. **Widget Container Layer**: Position slots (1-5) that lazy-load widgets on demand
+3. **Widget Layer**: Individual widget components, code-split into separate chunks
+
+### Key Features
+
+- **Code Splitting**: Each widget is lazy-loaded and becomes its own chunk, only loaded when assigned to a slot
+- **Position-Based Layout**: Widgets are assigned positions 1-5 (left-to-right, top-to-bottom)
+- **Configuration Persistence**: Widget positions and assignments stored in localStorage
+- **Scalable**: Easy to add new widgets by registering in the widget registry
+- **Empty Slots**: Supports empty slots (widgetType: null) for future customization
+- **Future-Ready**: Foundation for drag-and-drop reordering, widget enable/disable, and keyboard shortcuts
+
+### Widget Configuration
+
+Widget configuration is stored in localStorage under the key `'hyperdash-widget-config'`:
+
+```typescript
+[
+  { position: 1, widgetType: 'clock' },
+  { position: 2, widgetType: 'weather' },
+  { position: 3, widgetType: 'system' },
+  { position: 4, widgetType: 'todo' },
+  { position: 5, widgetType: 'notepad' }
+]
+```
+
+### Adding New Widgets
+
+To add a new widget:
+1. Create widget component file in `app/components/`
+2. Register widget type in `app/lib/widgetRegistry.ts`
+3. Add lazy import in `app/components/WidgetContainer.tsx`
+4. Optionally add to default configuration in `app/lib/widgetConfig.ts`
+
+See `.cursorrules` for detailed documentation on the widget system architecture.
+
 ## Storage
 
 All data is stored in browser localStorage and persists across sessions:
+- **Widget Configuration**: Widget positions and assignments (`hyperdash-widget-config`)
 - **Todos**: Task list items and completion status
 - **Notes**: Notepad content with auto-save
 - **Wallpaper**: Custom uploaded wallpaper images (base64 encoded)

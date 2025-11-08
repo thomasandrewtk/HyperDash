@@ -1,16 +1,17 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import Widget from './Widget';
-import NotepadWidget from './NotepadWidget';
-import TodoWidget from './TodoWidget';
-import WeatherWidget from './WeatherWidget';
-import ClockWidget from './ClockWidget';
-import SystemInfoWidget from './SystemInfoWidget';
 import LoadingScreen from './LoadingScreen';
 import Image from 'next/image';
 import { getFromLocalStorage } from '@/app/lib/utils';
 import { ColorProvider, useReactiveColors } from './ColorContext';
+import WidgetContainer from './WidgetContainer';
+import {
+  getWidgetConfiguration,
+  getLayoutSlots,
+  WidgetSlot,
+} from '@/app/lib/widgetConfig';
+import { WidgetType } from '@/app/lib/widgetRegistry';
 
 function DashboardContent() {
   const { isReady: colorsReady } = useReactiveColors();
@@ -19,6 +20,7 @@ function DashboardContent() {
   const [weatherReady, setWeatherReady] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const minDisplayTimeRef = useRef<number | null>(null);
+  const [widgetConfig, setWidgetConfig] = useState(() => getWidgetConfiguration());
 
   // Set minimum display time start when component mounts
   useEffect(() => {
@@ -64,6 +66,17 @@ function DashboardContent() {
     setWeatherReady(true);
   };
 
+  // Get widget-specific props based on widget type and position
+  const getWidgetProps = (widgetType: WidgetType | null, position: number): Record<string, any> => {
+    if (widgetType === 'weather') {
+      return { onLoadComplete: handleWeatherLoadComplete };
+    }
+    return {};
+  };
+
+  // Calculate layout slots from configuration
+  const { topRow, bottomRow } = getLayoutSlots(widgetConfig);
+
   const defaultWallpaper = '/Gradient_18_16-9.png';
 
   return (
@@ -94,25 +107,26 @@ function DashboardContent() {
         <div className="relative z-10 h-screen p-4 flex flex-col overflow-hidden">
           {/* Top row - 1/3 height with 3 widgets */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-shrink-0 mb-4" style={{ height: '33.333%' }}>
-            <div className="h-full">
-              <ClockWidget />
-            </div>
-            <div className="h-full">
-              <WeatherWidget onLoadComplete={handleWeatherLoadComplete} />
-            </div>
-            <div className="h-full">
-              <SystemInfoWidget />
-            </div>
+            {topRow.map((slot: WidgetSlot) => (
+              <WidgetContainer
+                key={slot.position}
+                position={slot.position}
+                widgetType={slot.widgetType}
+                widgetProps={getWidgetProps(slot.widgetType, slot.position)}
+              />
+            ))}
           </div>
           
           {/* Bottom row - 2/3 height with Todo and Notepad split 50/50 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1 min-h-0">
-            <div className="h-full min-h-0">
-              <TodoWidget />
-            </div>
-            <div className="h-full min-h-0">
-              <NotepadWidget />
-            </div>
+            {bottomRow.map((slot: WidgetSlot) => (
+              <WidgetContainer
+                key={slot.position}
+                position={slot.position}
+                widgetType={slot.widgetType}
+                widgetProps={getWidgetProps(slot.widgetType, slot.position)}
+              />
+            ))}
           </div>
         </div>
       </div>

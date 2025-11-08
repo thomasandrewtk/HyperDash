@@ -71,6 +71,168 @@ A reactive personal dashboard webapp. Built with Next.js 15, TypeScript, Tailwin
 - **Thumb**: `rgba(255, 255, 255, 0.2)` - Neutral white
 - **Thumb Hover**: `rgba(255, 255, 255, 0.4)` - More visible on hover
 
+## Modular Widget System Architecture
+
+### Three-Layer System
+
+HyperDash uses a three-layer modular architecture for widgets:
+
+1. **Dashboard Layer** (`app/components/Dashboard.tsx`)
+   - Top-level component that manages widget configuration
+   - Loads configuration from localStorage on mount
+   - Calculates layout slots from configuration
+   - Maps widget positions to containers dynamically
+   - Handles widget-specific props through `getWidgetProps()` function
+   - Maintains grid layout structure (currently 3+2, but derived from configuration)
+
+2. **Widget Container Layer** (`app/components/WidgetContainer.tsx`)
+   - Position slots (1-5) that conditionally render widgets
+   - Lazy loads widget components using React.lazy() and Suspense
+   - Only loads widgets when assigned to a slot (code splitting)
+   - Handles empty slots (when widgetType is null)
+   - Adds `id` and `data-widget-position` attributes for future keyboard shortcuts
+   - Shows loading state while widgets load
+
+3. **Widget Layer** (`app/components/[WidgetName]Widget.tsx`)
+   - Individual widget components in separate files
+   - Each widget is code-split into its own chunk
+   - Only loaded when assigned to a slot
+   - Receives props from Dashboard through WidgetContainer
+   - Uses base `Widget` component for consistent styling
+
+### Widget Registry System
+
+**File**: `app/lib/widgetRegistry.ts`
+
+The widget registry maps widget types to dynamic import paths for code splitting:
+
+- **WidgetType**: Union type defining available widget types: `'clock' | 'weather' | 'system' | 'todo' | 'notepad'`
+- **Dynamic Import Registry**: Maps widget types to import functions
+- **Code Splitting**: Each widget becomes its own chunk, only loaded when needed
+- **Type Safety**: TypeScript ensures only valid widget types are used
+
+**Key Functions:**
+- `loadWidget(type: WidgetType)`: Dynamically loads a widget component
+- `isValidWidgetType(type: string)`: Type guard for widget type validation
+- `getAvailableWidgetTypes()`: Returns array of all available widget types
+
+**Adding New Widget Types:**
+1. Add widget type to `WidgetType` union type
+2. Add dynamic import entry to `widgetComponents` registry
+3. Create widget component file in `app/components/`
+4. Register in WidgetContainer's `lazyWidgets` object
+
+### Widget Configuration System
+
+**File**: `app/lib/widgetConfig.ts`
+
+The configuration system manages widget positions and assignments:
+
+- **WidgetSlot Interface**: `{ position: number, widgetType: WidgetType | null }`
+  - `position`: Slot number (1-5, or more in future)
+  - `widgetType`: Widget type assigned to slot, or `null` for empty slot
+- **WidgetConfiguration Type**: Array of `WidgetSlot` objects
+- **localStorage Persistence**: Configuration stored under key `'hyperdash-widget-config'`
+- **Default Configuration**: Positions 1-5 mapped to Clock, Weather, System, Todo, Notepad
+
+**Key Functions:**
+- `getWidgetConfiguration()`: Loads config from localStorage or returns default
+- `saveWidgetConfiguration(config)`: Saves config to localStorage
+- `getWidgetByPosition(position)`: Gets slot by position number
+- `getWidgetsSortedByPosition()`: Returns slots sorted by position
+- `getLayoutSlots(config)`: Calculates topRow and bottomRow from configuration
+  - Positions 1-3 → top row (3 columns)
+  - Positions 4-5 → bottom row (2 columns)
+  - Fills empty slots if needed
+
+**Configuration Structure:**
+```typescript
+const config: WidgetConfiguration = [
+  { position: 1, widgetType: 'clock' },
+  { position: 2, widgetType: 'weather' },
+  { position: 3, widgetType: 'system' },
+  { position: 4, widgetType: 'todo' },
+  { position: 5, widgetType: 'notepad' },
+];
+```
+
+### WidgetContainer Component
+
+**File**: `app/components/WidgetContainer.tsx`
+
+The WidgetContainer component handles lazy loading and rendering of widgets:
+
+**Props:**
+- `position: number` - Position slot number (1-5)
+- `widgetType: WidgetType | null` - Widget type or null for empty slot
+- `widgetProps?: Record<string, any>` - Props to pass to widget
+
+**Implementation Details:**
+- Uses `React.lazy()` at module level for each widget type
+- Wraps widget in `Suspense` boundary with loading fallback
+- Renders empty container div if `widgetType` is null
+- Adds `id={`widget-${position}`}` for future keyboard shortcuts
+- Adds `data-widget-position={position}` attribute for querying
+
+**Lazy Loading Pattern:**
+```tsx
+const lazyWidgets: Record<WidgetType, React.LazyExoticComponent<...>> = {
+  clock: lazy(() => import('../components/ClockWidget')),
+  weather: lazy(() => import('../components/WeatherWidget')),
+  // ... etc
+};
+```
+
+**Empty Slot Handling:**
+- Empty slots render as empty div containers
+- Ready for future drag-and-drop UI
+- Prevents unnecessary API calls/data fetching
+
+### Widget Props Management
+
+**Dashboard Integration** (`app/components/Dashboard.tsx`):
+
+The Dashboard component manages widget-specific props through a mapping function:
+
+```tsx
+const getWidgetProps = (widgetType: WidgetType | null, position: number) => {
+  if (widgetType === 'weather') {
+    return { onLoadComplete: handleWeatherLoadComplete };
+  }
+  return {};
+};
+```
+
+**Pattern:**
+- Widgets that need Dashboard-level callbacks receive them via props
+- Props are passed through WidgetContainer to the lazy-loaded widget
+- Allows widgets to communicate with Dashboard (e.g., loading states, events)
+
+### Position-Based Layout Rules
+
+**Position Numbering:**
+- Positions are numbered **left-to-right, top-to-bottom**
+- Current layout: Positions 1-3 = top row, Positions 4-5 = bottom row
+- Positions are independent of widget types (any widget can go in any slot)
+
+**Layout Calculation:**
+- `getLayoutSlots()` function maps positions to rows
+- Top row: positions 1-3 (always 3 slots)
+- Bottom row: positions 4-5 (always 2 slots)
+- Empty slots are filled if configuration is incomplete
+- Future: Layout structure will be configurable (e.g., 2+3, 4+1, etc.)
+
+**Position Assignment:**
+- Each widget slot has a unique position number
+- Widgets can be reassigned to different positions
+- Empty slots have `widgetType: null`
+- Configuration persists across sessions via localStorage
+
+**Future Keyboard Shortcuts:**
+- Each widget container has `id={`widget-${position}`}`
+- Enables keyboard shortcuts (1-5 keys) to focus widgets
+- `data-widget-position` attribute for easy querying
+
 ## Component Structure
 
 ### Widget Component
@@ -86,9 +248,13 @@ All widgets use the base `Widget` component:
 - Flex column layout with proper height constraints
 
 ### Layout Structure
-- **Top Row (33.33% height)**: Clock, Weather, System Info - 3 equal columns
-- **Bottom Row (66.66% height)**: Todo List, Notepad - 50/50 split
+- **Position-Based System**: Widgets are assigned positions 1-5 (left-to-right, top-to-bottom)
+  - Positions 1-3: Top row (33.33% height, 3 equal columns)
+  - Positions 4-5: Bottom row (66.66% height, 2 columns, 50/50 split)
+- **Configurable Layout**: Widget positions are stored in localStorage and can be reordered
+- **Default Configuration**: Clock (1), Weather (2), System (3), Todo (4), Notepad (5)
 - Grid layout with proper height constraints (`flex-1 min-h-0`)
+- Future: Layout structure will be fully configurable via UI
 
 ### Widget-Specific Patterns
 
@@ -179,7 +345,8 @@ All widgets use the base `Widget` component:
 app/
   components/
     Widget.tsx          # Base widget component
-    Dashboard.tsx       # Main layout
+    Dashboard.tsx       # Main layout, manages widget configuration
+    WidgetContainer.tsx # Container component for lazy loading widgets
     ColorContext.tsx    # Reactive color context provider
     ClockWidget.tsx
     WeatherWidget.tsx
@@ -187,6 +354,8 @@ app/
     TodoWidget.tsx
     NotepadWidget.tsx
   lib/
+    widgetRegistry.ts   # Widget type definitions and dynamic import registry
+    widgetConfig.ts     # Widget configuration management and layout helpers
     utils.ts            # localStorage helpers
     colorUtils.ts       # Wallpaper analysis and color calculation
   globals.css           # Global styles, scrollbar, CSS custom properties
@@ -252,16 +421,63 @@ export default function MyWidget() {
 
 ## Adding New Widgets
 
-When adding new widgets:
-1. Use the base `Widget` component (no `borderColor` prop)
-2. Follow the unified white border scheme
-3. **Import and use `useReactiveColors()` hook** to access dynamic colors
-4. Apply colors via inline styles: `style={{ color: colors.primary }}`
-5. **NEVER use hardcoded Tailwind green classes** (text-green-300, etc.)
-6. Ensure proper height constraints for scrolling if needed
-7. Match button and input styling patterns
-8. Test hover states for visibility
-9. Placeholder colors are handled automatically via CSS
+When adding new widgets, follow this complete process:
+
+### Step 1: Create Widget Component
+1. Create new widget file: `app/components/[WidgetName]Widget.tsx`
+2. Use the base `Widget` component (no `borderColor` prop)
+3. Follow the unified white border scheme
+4. **Import and use `useReactiveColors()` hook** to access dynamic colors
+5. Apply colors via inline styles: `style={{ color: colors.primary }}`
+6. **NEVER use hardcoded Tailwind green classes** (text-green-300, etc.)
+7. Ensure proper height constraints for scrolling if needed
+8. Match button and input styling patterns
+9. Test hover states for visibility
+10. Placeholder colors are handled automatically via CSS
+
+### Step 2: Register Widget Type
+1. Open `app/lib/widgetRegistry.ts`
+2. Add widget type to `WidgetType` union type: `'clock' | 'weather' | 'system' | 'todo' | 'notepad' | 'yourwidget'`
+3. Add dynamic import entry to `widgetComponents` registry:
+   ```typescript
+   yourwidget: () => import('../components/YourWidgetWidget'),
+   ```
+
+### Step 3: Register in WidgetContainer
+1. Open `app/components/WidgetContainer.tsx`
+2. Add lazy import entry to `lazyWidgets` object:
+   ```typescript
+   yourwidget: lazy(() => import('../components/YourWidgetWidget')),
+   ```
+
+### Step 4: Add to Configuration (Optional)
+1. Open `app/lib/widgetConfig.ts`
+2. Add widget to `DEFAULT_CONFIGURATION` array if desired:
+   ```typescript
+   { position: 6, widgetType: 'yourwidget' },
+   ```
+   Note: Default config currently has 5 slots, but can be extended
+
+### Step 5: Handle Widget Props (If Needed)
+1. Open `app/components/Dashboard.tsx`
+2. Add widget-specific props to `getWidgetProps()` function if widget needs Dashboard callbacks:
+   ```typescript
+   if (widgetType === 'yourwidget') {
+     return { onSomeEvent: handleSomeEvent };
+   }
+   ```
+
+### Widget Requirements Checklist
+- [ ] Widget component created in `app/components/`
+- [ ] Widget type added to `WidgetType` union in `widgetRegistry.ts`
+- [ ] Dynamic import added to `widgetComponents` in `widgetRegistry.ts`
+- [ ] Lazy import added to `lazyWidgets` in `WidgetContainer.tsx`
+- [ ] Widget uses base `Widget` component
+- [ ] Widget uses `useReactiveColors()` hook for colors
+- [ ] No hardcoded Tailwind green color classes
+- [ ] Proper height constraints for scrolling if needed
+- [ ] Widget props added to Dashboard's `getWidgetProps()` if needed
+- [ ] Widget added to default configuration if desired
 
 ## Common Patterns
 
