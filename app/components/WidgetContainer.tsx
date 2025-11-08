@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, lazy, useMemo } from 'react';
+import React, { Suspense, lazy, useMemo, useEffect, useRef } from 'react';
 import { WidgetType } from '@/app/lib/widgetRegistry';
 
 interface WidgetContainerProps {
@@ -32,6 +32,8 @@ export default function WidgetContainer({
   isFocused = false,
   setFocusedPositionFromMouse,
 }: WidgetContainerProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const handleMouseDown = (e: React.MouseEvent) => {
     // Focus only changes on explicit click/interaction, not hover
     // Use mousedown instead of click for instant feedback (fires earlier in event cycle)
@@ -44,6 +46,38 @@ export default function WidgetContainer({
       setFocusedPositionFromMouse(position);
     }
   };
+
+  // Detect when text inputs within this widget receive focus and focus the widget
+  useEffect(() => {
+    if (!setFocusedPositionFromMouse || widgetType === null || !containerRef.current) {
+      return;
+    }
+
+    const container = containerRef.current;
+
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement;
+      
+      // Check if the focused element is a text input
+      const isTextInput = 
+        target.tagName === 'INPUT' && (target as HTMLInputElement).type !== 'button' && (target as HTMLInputElement).type !== 'submit' && (target as HTMLInputElement).type !== 'reset' && (target as HTMLInputElement).type !== 'checkbox' && (target as HTMLInputElement).type !== 'radio' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable;
+
+      if (isTextInput) {
+        // Focus the widget when a text input receives focus
+        setFocusedPositionFromMouse(position);
+      }
+    };
+
+    // Use focusin event (bubbles) to catch focus on any descendant
+    container.addEventListener('focusin', handleFocusIn);
+
+    return () => {
+      container.removeEventListener('focusin', handleFocusIn);
+    };
+  }, [position, widgetType, setFocusedPositionFromMouse]);
+
   // Get the lazy component for this widget type
   const LazyWidget = useMemo(() => {
     if (!widgetType) return null;
@@ -54,6 +88,7 @@ export default function WidgetContainer({
   if (!widgetType || !LazyWidget) {
     return (
       <div
+        ref={containerRef}
         id={`widget-${position}`}
         data-widget-position={position}
         data-focused={isFocused}
@@ -67,6 +102,7 @@ export default function WidgetContainer({
   // Render widget with Suspense for loading state
   return (
     <div
+      ref={containerRef}
       id={`widget-${position}`}
       data-widget-position={position}
       data-focused={isFocused}
