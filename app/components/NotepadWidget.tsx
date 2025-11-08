@@ -21,6 +21,91 @@ interface NotepadData {
 }
 
 
+interface SerializedSelection {
+  startPath: number[];
+  startOffset: number;
+  endPath: number[];
+  endOffset: number;
+}
+
+const isNodeWithin = (node: Node | null, root: Node): boolean => {
+  let current: Node | null = node;
+  while (current) {
+    if (current === root) return true;
+    current = current.parentNode;
+  }
+  return false;
+};
+
+const getNodePath = (node: Node, root: Node): number[] => {
+  const path: number[] = [];
+  let current: Node | null = node;
+
+  while (current && current !== root) {
+    const parent = current.parentNode;
+    if (!parent) {
+      return [];
+    }
+
+    const index = Array.prototype.indexOf.call(parent.childNodes, current);
+    if (index === -1) {
+      return [];
+    }
+
+    path.unshift(index);
+    current = parent;
+  }
+
+  return path;
+};
+
+const getNodeFromPath = (root: Node, path: number[]): Node | null => {
+  let current: Node | null = root;
+  for (const index of path) {
+    if (!current || !current.childNodes || index >= current.childNodes.length) {
+      return null;
+    }
+    current = current.childNodes[index] ?? null;
+  }
+  return current;
+};
+
+const clampOffsetForNode = (node: Node, offset: number): number => {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const length = node.textContent?.length ?? 0;
+    return Math.min(offset, length);
+  }
+  const length = node.childNodes.length;
+  return Math.min(offset, length);
+};
+
+const serializeRange = (range: Range, root: Node): SerializedSelection | null => {
+  if (!isNodeWithin(range.startContainer, root) || !isNodeWithin(range.endContainer, root)) {
+    return null;
+  }
+
+  return {
+    startPath: getNodePath(range.startContainer, root),
+    startOffset: range.startOffset,
+    endPath: getNodePath(range.endContainer, root),
+    endOffset: range.endOffset,
+  };
+};
+
+const deserializeRange = (data: SerializedSelection, root: Node): Range | null => {
+  const startNode = getNodeFromPath(root, data.startPath);
+  const endNode = getNodeFromPath(root, data.endPath);
+
+  if (!startNode || !endNode) {
+    return null;
+  }
+
+  const range = document.createRange();
+  range.setStart(startNode, clampOffsetForNode(startNode, data.startOffset));
+  range.setEnd(endNode, clampOffsetForNode(endNode, data.endOffset));
+  return range;
+};
+
 export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
   const [tabs, setTabs] = useState<NotepadTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
@@ -35,9 +120,78 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
   const tabNameInputRef = useRef<HTMLInputElement>(null);
   const tabContainerRef = useRef<HTMLDivElement>(null);
   const tabsListRef = useRef<HTMLDivElement>(null);
+  const savedSelectionsRef = useRef<Record<string, SerializedSelection>>({});
   const activeTabRef = useRef<HTMLDivElement>(null);
   const isSwitchingTabRef = useRef(false);
   const { colors } = useReactiveColors();
+
+  const saveCurrentSelection = useCallback(() => {
+    if (!editorRef.current || !activeTabId) return;
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    if (!isNodeWithin(range.commonAncestorContainer, editorRef.current)) return;
+
+    const serialized = serializeRange(range, editorRef.current);
+    if (serialized) {
+      savedSelectionsRef.current[activeTabId] = serialized;
+    }
+  }, [activeTabId]);
+
+  const restoreSelection = useCallback(
+    (tabId: string | null, fallbackToEnd = false) => {
+      if (!tabId || !editorRef.current) return false;
+      const selection = window.getSelection();
+      if (!selection) return false;
+
+      const saved = savedSelectionsRef.current[tabId];
+      let range: Range | null = null;
+
+      if (saved) {
+        range = deserializeRange(saved, editorRef.current);
+      }
+
+      if (!range && fallbackToEnd) {
+        range = document.createRange();
+        range.selectNodeContents(editorRef.current);
+        range.collapse(false);
+      }
+
+      if (!range) {
+        return false;
+      }
+
+      selection.removeAllRanges();
+      selection.addRange(range);
+
+      const updated = serializeRange(range, editorRef.current);
+      if (updated) {
+        savedSelectionsRef.current[tabId] = updated;
+      }
+      return true;
+    },
+    []
+  );
+
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      if (!editorRef.current || !activeTabId) return;
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
+      const range = selection.getRangeAt(0);
+      if (!isNodeWithin(range.commonAncestorContainer, editorRef.current)) return;
+
+      const serialized = serializeRange(range, editorRef.current);
+      if (serialized) {
+        savedSelectionsRef.current[activeTabId] = serialized;
+      }
+    };
+
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => {
+      document.removeEventListener('selectionchange', handleSelectionChange);
+    };
+  }, [activeTabId]);
 
   // Initialize tabs from storage or create default tab
   useEffect(() => {
@@ -99,6 +253,11 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
         const links = editorRef.current.querySelectorAll('a.notepad-image-link');
         previousLinkCountRef.current = links.length;
         setTimeout(() => renumberImageLinks(), 0);
+        requestAnimationFrame(() => {
+          if (editorRef.current && document.activeElement === editorRef.current) {
+            restoreSelection(activeTabId, true);
+          }
+        });
       } else {
         // Tab not found yet - might be a race condition, reset the flag and try again
         isSwitchingTabRef.current = false;
@@ -109,7 +268,7 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
     if (activeTabRef.current && tabContainerRef.current) {
       activeTabRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
     }
-  }, [activeTabId, tabs]);
+  }, [activeTabId, tabs, restoreSelection]);
 
   // Attach click handlers to image links so they open properly
   const attachImageLinkHandlers = () => {
@@ -219,6 +378,7 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
           range.setEnd(savedSelection.end, savedSelection.endOffset);
           selection.removeAllRanges();
           selection.addRange(range);
+          saveCurrentSelection();
         }
       } catch (e) {
         // Selection might be invalid, ignore
@@ -290,6 +450,7 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
 
   // Tab management functions
   const createTab = () => {
+    saveCurrentSelection();
     // Save current tab content before creating new tab
     if (activeTabId && editorRef.current) {
       const currentContent = editorRef.current.innerHTML;
@@ -336,6 +497,7 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
 
   const switchTab = (tabId: string) => {
     if (tabId === activeTabId) return;
+    saveCurrentSelection();
     
     // Save current tab content before switching
     if (activeTabId && editorRef.current) {
@@ -351,6 +513,8 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
 
   const deleteTab = (tabId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    saveCurrentSelection();
+    delete savedSelectionsRef.current[tabId];
     
     // Save current tab content before deleting if it's the active tab
     if (activeTabId === tabId && editorRef.current) {
@@ -551,6 +715,7 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
         });
       }
     }
+    saveCurrentSelection();
   };
 
   // Helper function to check if text is a URL
@@ -639,7 +804,13 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
     }
     
     handleInput();
-  }, [handleInput]);
+    saveCurrentSelection();
+    if (activeTabId) {
+      requestAnimationFrame(() => {
+        restoreSelection(activeTabId, false);
+      });
+    }
+  }, [handleInput, saveCurrentSelection]);
 
   const insertURLLink = (urlString: string) => {
     if (!editorRef.current) return;
@@ -697,10 +868,28 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
       // Insert at cursor position within editor
       insertRange.deleteContents();
       insertRange.insertNode(link);
-      insertRange.setStartAfter(link);
-      insertRange.collapse(true);
+      
+      // Find or create a text node after the link for proper cursor positioning
+      let nextNode = link.nextSibling;
+      let cursorTextNode: Text | null = null;
+      
+      if (nextNode && nextNode.nodeType === Node.TEXT_NODE) {
+        // Use existing text node
+        cursorTextNode = nextNode as Text;
+      } else {
+        // Create a space text node for cursor positioning (will be replaced when user types)
+        cursorTextNode = document.createTextNode(' ');
+        if (link.parentNode) {
+          link.parentNode.insertBefore(cursorTextNode, nextNode);
+        }
+      }
+      
+      // Set cursor at the start of the text node after the link
+      const range = document.createRange();
+      range.setStart(cursorTextNode, 0);
+      range.collapse(true);
       selection.removeAllRanges();
-      selection.addRange(insertRange);
+      selection.addRange(range);
     } else {
       // Insert at the end of editor content
       const range = document.createRange();
@@ -708,16 +897,66 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
       range.collapse(false); // Collapse to end
       range.insertNode(link);
       
-      // Set cursor after the link
-      range.setStartAfter(link);
-      range.collapse(true);
+      // Ensure there's a text node after the link
+      const textNode = document.createTextNode(' '); // Space for cursor positioning
+      if (link.parentNode) {
+        link.parentNode.insertBefore(textNode, link.nextSibling);
+      }
+      
+      // Set cursor in the text node after the link
+      const cursorRange = document.createRange();
+      cursorRange.setStart(textNode, 0);
+      cursorRange.collapse(true);
       if (selection) {
         selection.removeAllRanges();
-        selection.addRange(range);
+        selection.addRange(cursorRange);
       }
     }
     
     handleInput();
+    
+    // Wait for DOM updates (like renumbering) to complete, then ensure cursor is visually correct
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!editorRef.current) return;
+        editorRef.current.focus(); // Ensure editor is focused for visual caret
+        
+        const currentSelection = window.getSelection();
+        if (currentSelection && currentSelection.rangeCount > 0) {
+          const range = currentSelection.getRangeAt(0);
+          if (editorRef.current.contains(range.commonAncestorContainer)) {
+            // Find the link and ensure cursor is in the text node after it
+            const linkNode = link;
+            let nextNode = linkNode.nextSibling;
+            let cursorTextNode: Text | null = null;
+            
+            if (nextNode && nextNode.nodeType === Node.TEXT_NODE) {
+              // Use existing text node
+              cursorTextNode = nextNode as Text;
+            } else {
+              // Create text node if it doesn't exist
+              cursorTextNode = document.createTextNode(' ');
+              if (linkNode.parentNode) {
+                linkNode.parentNode.insertBefore(cursorTextNode, nextNode);
+              }
+            }
+            
+            if (cursorTextNode) {
+              const newRange = document.createRange();
+              newRange.setStart(cursorTextNode, 0);
+              newRange.collapse(true);
+              currentSelection.removeAllRanges();
+              currentSelection.addRange(newRange);
+              
+              // Trigger a reflow to ensure browser updates visual caret
+              void editorRef.current.offsetHeight;
+              
+              saveCurrentSelection();
+            }
+          }
+        }
+      });
+    });
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
@@ -745,6 +984,12 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
     
     // Otherwise, paste text as-is
     document.execCommand('insertText', false, text);
+    saveCurrentSelection();
+    if (activeTabId) {
+      requestAnimationFrame(() => {
+        restoreSelection(activeTabId, false);
+      });
+    }
   };
 
   const insertImageLink = (file: File) => {
@@ -801,10 +1046,28 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
       // Insert at cursor position within editor
       insertRange.deleteContents();
       insertRange.insertNode(link);
-      insertRange.setStartAfter(link);
-      insertRange.collapse(true);
+      
+      // Find or create a text node after the link for proper cursor positioning
+      let nextNode = link.nextSibling;
+      let cursorTextNode: Text | null = null;
+      
+      if (nextNode && nextNode.nodeType === Node.TEXT_NODE) {
+        // Use existing text node
+        cursorTextNode = nextNode as Text;
+      } else {
+        // Create a space text node for cursor positioning (will be replaced when user types)
+        cursorTextNode = document.createTextNode(' ');
+        if (link.parentNode) {
+          link.parentNode.insertBefore(cursorTextNode, nextNode);
+        }
+      }
+      
+      // Set cursor at the start of the text node after the link
+      const range = document.createRange();
+      range.setStart(cursorTextNode, 0);
+      range.collapse(true);
       selection.removeAllRanges();
-      selection.addRange(insertRange);
+      selection.addRange(range);
     } else {
       // Insert at the end of editor content
       const range = document.createRange();
@@ -812,12 +1075,19 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
       range.collapse(false); // Collapse to end
       range.insertNode(link);
       
-      // Set cursor after the link
-      range.setStartAfter(link);
-      range.collapse(true);
+      // Ensure there's a text node after the link
+      const textNode = document.createTextNode(' '); // Space for cursor positioning
+      if (link.parentNode) {
+        link.parentNode.insertBefore(textNode, link.nextSibling);
+      }
+      
+      // Set cursor in the text node after the link
+      const cursorRange = document.createRange();
+      cursorRange.setStart(textNode, 0);
+      cursorRange.collapse(true);
       if (selection) {
         selection.removeAllRanges();
-        selection.addRange(range);
+        selection.addRange(cursorRange);
       }
     }
     
@@ -825,6 +1095,49 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
     const links = editorRef.current.querySelectorAll('a.notepad-image-link');
     previousLinkCountRef.current = links.length;
     handleInput();
+    
+    // Wait for DOM updates (like renumbering) to complete, then ensure cursor is visually correct
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!editorRef.current) return;
+        editorRef.current.focus(); // Ensure editor is focused for visual caret
+        
+        const currentSelection = window.getSelection();
+        if (currentSelection && currentSelection.rangeCount > 0) {
+          const range = currentSelection.getRangeAt(0);
+          if (editorRef.current.contains(range.commonAncestorContainer)) {
+            // Find the link and ensure cursor is in the text node after it
+            const linkNode = link;
+            let nextNode = linkNode.nextSibling;
+            let cursorTextNode: Text | null = null;
+            
+            if (nextNode && nextNode.nodeType === Node.TEXT_NODE) {
+              // Use existing text node
+              cursorTextNode = nextNode as Text;
+            } else {
+              // Create text node if it doesn't exist
+              cursorTextNode = document.createTextNode(' ');
+              if (linkNode.parentNode) {
+                linkNode.parentNode.insertBefore(cursorTextNode, nextNode);
+              }
+            }
+            
+            if (cursorTextNode) {
+              const newRange = document.createRange();
+              newRange.setStart(cursorTextNode, 0);
+              newRange.collapse(true);
+              currentSelection.removeAllRanges();
+              currentSelection.addRange(newRange);
+              
+              // Trigger a reflow to ensure browser updates visual caret
+              void editorRef.current.offsetHeight;
+              
+              saveCurrentSelection();
+            }
+          }
+        }
+      });
+    });
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -840,10 +1153,14 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
 
   // Helper functions for keyboard shortcuts
   const focusEditor = useCallback(() => {
-    if (editorRef.current) {
-      editorRef.current.focus();
+    if (!editorRef.current) return;
+    editorRef.current.focus();
+    if (activeTabId) {
+      requestAnimationFrame(() => {
+        restoreSelection(activeTabId, true);
+      });
     }
-  }, []);
+  }, [activeTabId, restoreSelection]);
 
   const handleNewTab = useCallback(() => {
     createTab();
