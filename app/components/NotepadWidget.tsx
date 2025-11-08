@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Widget from './Widget';
 import { getFromLocalStorage, saveToLocalStorage } from '@/app/lib/utils';
 import { useReactiveColors } from './ColorContext';
@@ -19,19 +19,6 @@ interface NotepadData {
   activeTabId: string;
 }
 
-interface ImageResizeState {
-  img: HTMLImageElement;
-  startX: number;
-  startY: number;
-  startWidth: number;
-  startHeight: number;
-  handle: 'se' | 'sw' | 'ne' | 'nw';
-}
-
-interface ImageControl {
-  img: HTMLImageElement;
-  rect: DOMRect;
-}
 
 export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
   const [tabs, setTabs] = useState<NotepadTab[]>([]);
@@ -41,12 +28,8 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
   const [draggedTabId, setDraggedTabId] = useState<string | null>(null);
   const [dragOverTabId, setDragOverTabId] = useState<string | null>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
-  const [isResizing, setIsResizing] = useState<ImageResizeState | null>(null);
-  const [hoveredImage, setHoveredImage] = useState<ImageControl | null>(null);
-  const [imageControls, setImageControls] = useState<ImageControl[]>([]);
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const controlsRef = useRef<HTMLDivElement>(null);
   const tabNameInputRef = useRef<HTMLInputElement>(null);
   const tabContainerRef = useRef<HTMLDivElement>(null);
   const tabsListRef = useRef<HTMLDivElement>(null);
@@ -108,6 +91,12 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
         editorRef.current.innerHTML = activeTab.content;
         setContent(activeTab.content);
         isSwitchingTabRef.current = false;
+        // Reattach click handlers for image links
+        attachImageLinkHandlers();
+        // Reset link count and renumber image links when loading tab content
+        const links = editorRef.current.querySelectorAll('a.notepad-image-link');
+        previousLinkCountRef.current = links.length;
+        setTimeout(() => renumberImageLinks(), 0);
       }
     }
     
@@ -116,6 +105,132 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
       activeTabRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
     }
   }, [activeTabId, tabs]);
+
+  // Attach click handlers to image links so they open properly
+  const attachImageLinkHandlers = () => {
+    if (!editorRef.current) return;
+    const links = editorRef.current.querySelectorAll<HTMLAnchorElement>('a.notepad-image-link');
+    links.forEach(link => {
+      // Remove existing handlers by cloning
+      const newLink = link.cloneNode(true) as HTMLAnchorElement;
+      link.parentNode?.replaceChild(newLink, link);
+      
+      // Add mousedown handler to allow selection
+      newLink.addEventListener('mousedown', (e) => {
+        // Allow normal text selection/deletion behavior
+        if (e.shiftKey || e.ctrlKey || e.metaKey) {
+          return; // Allow selection with modifier keys
+        }
+      });
+      
+      // Add click handler that opens the link (only if not selecting)
+      newLink.addEventListener('click', (e) => {
+        const selection = window.getSelection();
+        if (selection && selection.toString().length === 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (newLink.href) {
+            window.open(newLink.href, '_blank', 'noopener,noreferrer');
+          }
+        }
+      });
+    });
+  };
+
+  // Get the next image number for the current tab
+  const getNextImageNumber = (): number => {
+    if (!editorRef.current) return 1;
+    const links = editorRef.current.querySelectorAll('a.notepad-image-link');
+    const numbers: number[] = [];
+    links.forEach(link => {
+      const text = link.textContent || '';
+      const match = text.match(/\[Image #(\d+)\]/);
+      if (match) {
+        numbers.push(parseInt(match[1], 10));
+      }
+    });
+    if (numbers.length === 0) return 1;
+    return Math.max(...numbers) + 1;
+  };
+
+  // Renumber image links in the current tab
+  const renumberImageLinks = (preserveSelection = false) => {
+    if (!editorRef.current || !activeTabId || isRenumberingRef.current) return;
+    
+    const links = editorRef.current.querySelectorAll<HTMLAnchorElement>('a.notepad-image-link');
+    const currentLinkCount = links.length;
+    
+    // Only renumber if the number of links changed
+    if (currentLinkCount === previousLinkCountRef.current && currentLinkCount > 0) {
+      // Still check if numbers are correct
+      let needsRenumbering = false;
+      let counter = 1;
+      links.forEach(link => {
+        const expectedText = `[Image #${counter}]`;
+        if (link.textContent !== expectedText) {
+          needsRenumbering = true;
+        }
+        counter++;
+      });
+      if (!needsRenumbering) return;
+    }
+    
+    previousLinkCountRef.current = currentLinkCount;
+    
+    // Save selection if needed
+    let savedSelection: { start: Node | null; startOffset: number; end: Node | null; endOffset: number } | null = null;
+    if (preserveSelection) {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        savedSelection = {
+          start: range.startContainer,
+          startOffset: range.startOffset,
+          end: range.endContainer,
+          endOffset: range.endOffset,
+        };
+      }
+    }
+    
+    isRenumberingRef.current = true;
+    let counter = 1;
+    let changed = false;
+    links.forEach(link => {
+      const expectedText = `[Image #${counter}]`;
+      if (link.textContent !== expectedText) {
+        link.textContent = expectedText;
+        changed = true;
+      }
+      counter++;
+    });
+    
+    // Restore selection if we saved it
+    if (preserveSelection && savedSelection && window.getSelection()) {
+      try {
+        const selection = window.getSelection()!;
+        const range = document.createRange();
+        if (savedSelection.start && savedSelection.end) {
+          range.setStart(savedSelection.start, savedSelection.startOffset);
+          range.setEnd(savedSelection.end, savedSelection.endOffset);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      } catch (e) {
+        // Selection might be invalid, ignore
+      }
+    }
+    
+    isRenumberingRef.current = false;
+    
+    // Only save if something changed
+    if (changed) {
+      const newContent = editorRef.current.innerHTML;
+      setContent(newContent);
+      setTabs(prevTabs => prevTabs.map(tab =>
+        tab.id === activeTabId ? { ...tab, content: newContent } : tab
+      ));
+    }
+  };
 
   // Save tabs to storage whenever they change
   useEffect(() => {
@@ -130,6 +245,8 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
 
   const activeTab = tabs.find(tab => tab.id === activeTabId);
   const [content, setContent] = useState('');
+  const isRenumberingRef = useRef(false);
+  const previousLinkCountRef = useRef(0);
 
   // Check for tab overflow
   useEffect(() => {
@@ -396,149 +513,27 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
     return newTabs;
   };
 
-  // Update image controls positions
-  const updateImageControls = useCallback(() => {
-    if (!editorRef.current) return;
-    
-    const images = editorRef.current.querySelectorAll<HTMLImageElement>('img.notepad-image');
-    const controls: ImageControl[] = [];
-    
-    images.forEach((img) => {
-      const rect = img.getBoundingClientRect();
-      const editorRect = editorRef.current!.getBoundingClientRect();
-      controls.push({
-        img,
-        rect: {
-          ...rect,
-          left: rect.left - editorRect.left,
-          top: rect.top - editorRect.top,
-        } as DOMRect,
-      });
-    });
-    
-    setImageControls(controls);
-  }, []);
-
-  // Setup images when content changes
-  useEffect(() => {
-    if (!editorRef.current) return;
-    
-    const images = editorRef.current.querySelectorAll<HTMLImageElement>('img.notepad-image');
-    const timeouts: NodeJS.Timeout[] = [];
-    
-    const handleMouseEnter = (img: HTMLImageElement) => {
-      const updateHover = () => {
-        if (!editorRef.current) return;
-        const rect = img.getBoundingClientRect();
-        const editorRect = editorRef.current.getBoundingClientRect();
-        setHoveredImage({
-          img,
-          rect: {
-            ...rect,
-            left: rect.left - editorRect.left,
-            top: rect.top - editorRect.top,
-          } as DOMRect,
-        });
-      };
-      updateHover();
-    };
-    
-    const handleMouseLeave = () => {
-      // Small delay to allow moving to controls
-      const timeout = setTimeout(() => {
-        setHoveredImage((prev) => {
-          // Only clear if mouse is not over controls
-          if (prev && !controlsRef.current?.matches(':hover')) {
-            return null;
-          }
-          return prev;
-        });
-      }, 100);
-      timeouts.push(timeout);
-    };
-    
-    images.forEach((img) => {
-      // Ensure images have proper sizing if they don't already
-      if (!img.style.width || img.style.width === 'auto') {
-        if (!editorRef.current) return;
-        const editorWidth = editorRef.current.clientWidth - 24;
-        const currentWidth = img.offsetWidth || img.naturalWidth;
-        const currentHeight = img.offsetHeight || img.naturalHeight;
-        
-        // If image is too large, scale it down
-        if (currentWidth > 400 || currentWidth > editorWidth - 20) {
-          const maxWidth = Math.min(400, editorWidth - 20);
-          const aspectRatio = currentWidth / currentHeight;
-          const newWidth = Math.min(currentWidth, maxWidth);
-          const newHeight = newWidth / aspectRatio;
-          
-          if (newHeight > 300) {
-            const constrainedHeight = 300;
-            const constrainedWidth = constrainedHeight * aspectRatio;
-            img.style.width = `${constrainedWidth}px`;
-            img.style.height = `${constrainedHeight}px`;
-          } else {
-            img.style.width = `${newWidth}px`;
-            img.style.height = `${newHeight}px`;
-          }
-          img.style.maxWidth = 'none';
-        }
-      }
-      
-      // Remove existing listeners by cloning
-      const newImg = img.cloneNode(true) as HTMLImageElement;
-      img.parentNode?.replaceChild(newImg, img);
-      
-      newImg.addEventListener('mouseenter', () => handleMouseEnter(newImg));
-      newImg.addEventListener('mouseleave', handleMouseLeave);
-    });
-    
-    updateImageControls();
-    
-    // Cleanup function
-    return () => {
-      // Clear any pending timeouts
-      timeouts.forEach(timeout => clearTimeout(timeout));
-      // Clear hover state on cleanup
-      setHoveredImage(null);
-    };
-  }, [content, updateImageControls]);
-
-  // Update controls on scroll
-  useEffect(() => {
-    if (!editorRef.current) return;
-    
-    const handleScroll = () => {
-      if (hoveredImage) {
-        const rect = hoveredImage.img.getBoundingClientRect();
-        const editorRect = editorRef.current!.getBoundingClientRect();
-        setHoveredImage({
-          ...hoveredImage,
-          rect: {
-            ...rect,
-            left: rect.left - editorRect.left,
-            top: rect.top - editorRect.top,
-          } as DOMRect,
-        });
-      }
-    };
-    
-    const editor = editorRef.current;
-    editor.addEventListener('scroll', handleScroll);
-    return () => {
-      editor.removeEventListener('scroll', handleScroll);
-    };
-  }, [hoveredImage]);
 
   const handleInput = () => {
-    if (editorRef.current && activeTabId) {
+    if (editorRef.current && activeTabId && !isRenumberingRef.current) {
       const newContent = editorRef.current.innerHTML;
       setContent(newContent);
       // Update the active tab's content using functional update
       setTabs(prevTabs => prevTabs.map(tab =>
         tab.id === activeTabId ? { ...tab, content: newContent } : tab
       ));
-      updateImageControls();
+      
+      // Check if link count changed
+      const links = editorRef.current.querySelectorAll('a.notepad-image-link');
+      const currentLinkCount = links.length;
+      
+      // Only renumber if link count changed or on debounce
+      if (currentLinkCount !== previousLinkCountRef.current) {
+        // Use requestAnimationFrame to preserve cursor position
+        requestAnimationFrame(() => {
+          renumberImageLinks(true);
+        });
+      }
     }
   };
 
@@ -552,7 +547,7 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
       if (items[i].type.indexOf('image') !== -1) {
         const blob = items[i].getAsFile();
         if (blob) {
-          insertImage(blob);
+          insertImageLink(blob);
           return;
         }
       }
@@ -563,199 +558,96 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
     document.execCommand('insertText', false, text);
   };
 
-  const insertImage = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      if (!editorRef.current) return;
-      
-      // Focus the editor first
-      editorRef.current.focus();
-      
-      const img = document.createElement('img');
-      img.src = e.target?.result as string;
-      img.className = 'notepad-image';
-      
-      // Set default max size based on editor width
-      const editorWidth = editorRef.current.clientWidth - 24; // Account for padding
-      const defaultMaxWidth = Math.min(400, editorWidth - 20); // Max 400px or editor width minus margin
-      
-      img.style.maxWidth = `${defaultMaxWidth}px`;
-      img.style.width = 'auto';
-      img.style.height = 'auto';
-      img.style.display = 'block';
-      img.style.margin = '8px 0';
-      img.style.borderRadius = '4px';
-      img.style.cursor = 'move';
-      
-      // Wait for image to load to get natural dimensions
-      img.onload = () => {
-        const naturalWidth = img.naturalWidth;
-        const naturalHeight = img.naturalHeight;
-        const aspectRatio = naturalWidth / naturalHeight;
-        
-        // Set initial size - fit within default max width while maintaining aspect ratio
-        let initialWidth = Math.min(naturalWidth, defaultMaxWidth);
-        let initialHeight = initialWidth / aspectRatio;
-        
-        // If height is too tall, scale down based on height instead
-        const maxHeight = 300; // Max initial height
-        if (initialHeight > maxHeight) {
-          initialHeight = maxHeight;
-          initialWidth = initialHeight * aspectRatio;
-        }
-        
-        img.style.width = `${initialWidth}px`;
-        img.style.height = `${initialHeight}px`;
-        img.style.maxWidth = 'none'; // Remove maxWidth constraint after setting explicit size
-      };
-      
-      // Insert at cursor position, but only if selection is within the editor
+  const insertImageLink = (file: File) => {
+    if (!editorRef.current) return;
+    
+    // Focus the editor first
+    editorRef.current.focus();
+    
+    // Create blob URL
+    const blobUrl = URL.createObjectURL(file);
+    const imageNumber = getNextImageNumber();
+    
+    // Create link element
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = `[Image #${imageNumber}]`;
+    link.className = 'notepad-image-link';
+    link.style.textDecoration = 'underline';
+    link.style.cursor = 'pointer';
+    
+    // Add click handler to open link (only on actual click, not on selection)
+    link.addEventListener('mousedown', (e) => {
+      // Allow normal text selection/deletion behavior
+      if (e.shiftKey || e.ctrlKey || e.metaKey) {
+        return; // Allow selection with modifier keys
+      }
+    });
+    
+    link.addEventListener('click', (e) => {
+      // Only prevent default if it's a simple click (not part of selection)
       const selection = window.getSelection();
-      let insertRange: Range | null = null;
-      
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        // Check if the range is within the editor
-        if (editorRef.current.contains(range.commonAncestorContainer)) {
-          insertRange = range;
-        }
+      if (selection && selection.toString().length === 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.open(blobUrl, '_blank', 'noopener,noreferrer');
       }
+    });
+    
+    // Insert at cursor position, but only if selection is within the editor
+    const selection = window.getSelection();
+    let insertRange: Range | null = null;
+    
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      // Check if the range is within the editor
+      if (editorRef.current.contains(range.commonAncestorContainer)) {
+        insertRange = range;
+      }
+    }
+    
+    if (insertRange && selection) {
+      // Insert at cursor position within editor
+      insertRange.deleteContents();
+      insertRange.insertNode(link);
+      insertRange.setStartAfter(link);
+      insertRange.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(insertRange);
+    } else {
+      // Insert at the end of editor content
+      const range = document.createRange();
+      range.selectNodeContents(editorRef.current);
+      range.collapse(false); // Collapse to end
+      range.insertNode(link);
       
-      if (insertRange && selection) {
-        // Insert at cursor position within editor
-        insertRange.deleteContents();
-        insertRange.insertNode(img);
-        insertRange.setStartAfter(img);
-        insertRange.collapse(true);
+      // Set cursor after the link
+      range.setStartAfter(link);
+      range.collapse(true);
+      if (selection) {
         selection.removeAllRanges();
-        selection.addRange(insertRange);
-      } else {
-        // Insert at the end of editor content
-        const range = document.createRange();
-        range.selectNodeContents(editorRef.current);
-        range.collapse(false); // Collapse to end
-        range.insertNode(img);
-        
-        // Set cursor after the image
-        range.setStartAfter(img);
-        range.collapse(true);
-        if (selection) {
-          selection.removeAllRanges();
-          selection.addRange(range);
-        }
+        selection.addRange(range);
       }
-      
-      handleInput();
-    };
-    reader.readAsDataURL(file);
+    }
+    
+    // Update link count and trigger renumbering
+    const links = editorRef.current.querySelectorAll('a.notepad-image-link');
+    previousLinkCountRef.current = links.length;
+    handleInput();
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && file.type.startsWith('image/')) {
-      insertImage(file);
+      insertImageLink(file);
     }
     // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
-
-  const deleteImage = (img: HTMLImageElement) => {
-    img.remove();
-    setHoveredImage(null);
-    handleInput();
-  };
-
-  const handleResizeMouseDown = (
-    e: React.MouseEvent<HTMLDivElement>,
-    img: HTMLImageElement,
-    handle: ImageResizeState['handle']
-  ) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const rect = img.getBoundingClientRect();
-    setIsResizing({
-      img,
-      startX: e.clientX,
-      startY: e.clientY,
-      startWidth: rect.width,
-      startHeight: rect.height,
-      handle,
-    });
-  };
-
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isResizing) return;
-    
-    const { img, startX, startY, startWidth, startHeight, handle } = isResizing;
-    const deltaX = e.clientX - startX;
-    const deltaY = e.clientY - startY;
-    
-    let newWidth = startWidth;
-    let newHeight = startHeight;
-    
-    // Calculate new dimensions based on handle
-    if (handle.includes('e')) newWidth = startWidth + deltaX;
-    if (handle.includes('w')) newWidth = startWidth - deltaX;
-    if (handle.includes('s')) newHeight = startHeight + deltaY;
-    if (handle.includes('n')) newHeight = startHeight - deltaY;
-    
-    // Maintain aspect ratio
-    const aspectRatio = startWidth / startHeight;
-    if (Math.abs(deltaX) > Math.abs(deltaY)) {
-      newHeight = newWidth / aspectRatio;
-    } else {
-      newWidth = newHeight * aspectRatio;
-    }
-    
-    // Apply constraints - max size based on editor width
-    const editorWidth = editorRef.current?.clientWidth || 600;
-    const maxWidth = Math.min(600, editorWidth - 40); // Max 600px or editor width minus padding
-    const maxHeight = 800; // Max height constraint
-    
-    newWidth = Math.max(50, Math.min(newWidth, maxWidth));
-    newHeight = Math.max(50, Math.min(newHeight, maxHeight));
-    
-    requestAnimationFrame(() => {
-      img.style.width = `${newWidth}px`;
-      img.style.height = `${newHeight}px`;
-      img.style.maxWidth = 'none';
-      
-      // Update hover state position
-      if (hoveredImage?.img === img) {
-        const rect = img.getBoundingClientRect();
-        const editorRect = editorRef.current!.getBoundingClientRect();
-        setHoveredImage({
-          ...hoveredImage,
-          rect: {
-            ...rect,
-            left: rect.left - editorRect.left,
-            top: rect.top - editorRect.top,
-          } as DOMRect,
-        });
-      }
-    });
-  }, [isResizing, hoveredImage]);
-
-  const handleMouseUp = useCallback(() => {
-    if (isResizing) {
-      setIsResizing(null);
-      handleInput();
-    }
-  }, [isResizing]);
-
-  useEffect(() => {
-    if (isResizing) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isResizing, handleMouseMove, handleMouseUp]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1017,6 +909,20 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
             contentEditable
             onInput={handleInput}
             onPaste={handlePaste}
+            onClick={(e) => {
+              // Allow links to be clicked (only if not selecting text)
+              const target = e.target as HTMLElement;
+              if (target.tagName === 'A' && target.classList.contains('notepad-image-link')) {
+                const selection = window.getSelection();
+                if (selection && selection.toString().length === 0) {
+                  e.preventDefault();
+                  const link = target as HTMLAnchorElement;
+                  if (link.href) {
+                    window.open(link.href, '_blank', 'noopener,noreferrer');
+                  }
+                }
+              }
+            }}
             className="h-full w-full bg-black/10 border border-white/20 rounded-sm p-3 font-mono text-sm focus:outline-none focus:border-white/50 focus:ring-1 focus:ring-white/30 transition-all duration-200 hover:border-white/40 overflow-y-auto overflow-x-hidden auto-hide-scrollbar"
             style={{
               color: colors.primary,
@@ -1024,57 +930,6 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
             }}
             data-placeholder="Start typing or paste an image..."
           />
-
-          {/* Image Controls Overlay */}
-          {hoveredImage && (
-            <div
-              ref={controlsRef}
-              className="absolute pointer-events-none z-20"
-              style={{
-                left: `${hoveredImage.rect.left}px`,
-                top: `${hoveredImage.rect.top}px`,
-                width: `${hoveredImage.rect.width}px`,
-                height: `${hoveredImage.rect.height}px`,
-              }}
-              onMouseEnter={() => {
-                // Keep controls visible when hovering over them
-                const rect = hoveredImage.img.getBoundingClientRect();
-                const editorRect = editorRef.current!.getBoundingClientRect();
-                setHoveredImage({
-                  ...hoveredImage,
-                  rect: {
-                    ...rect,
-                    left: rect.left - editorRect.left,
-                    top: rect.top - editorRect.top,
-                  } as DOMRect,
-                });
-              }}
-              onMouseLeave={() => {
-                setTimeout(() => setHoveredImage(null), 100);
-              }}
-            >
-              {/* Delete Button */}
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  deleteImage(hoveredImage.img);
-                }}
-                className="absolute -top-2 -left-2 pointer-events-auto bg-black/80 border border-white/30 rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-black/95 hover:border-white/50 hover:scale-110 transition-all duration-200 font-mono"
-                style={{ color: colors.button }}
-                title="Delete image"
-              >
-                ×
-              </button>
-
-              {/* Resize Handle (top-right corner) */}
-              <div
-                className="absolute -top-1 -right-1 pointer-events-auto w-4 h-4 bg-white/60 border border-white/80 rounded cursor-nesw-resize hover:bg-white/80 hover:scale-110 transition-all z-10"
-                onMouseDown={(e) => handleResizeMouseDown(e, hoveredImage.img, 'ne')}
-                title="Drag to resize"
-              />
-            </div>
-          )}
         </div>
 
         {/* Global styles */}
@@ -1084,23 +939,20 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
             overflow-x: hidden !important;
           }
 
-          [contenteditable] img.notepad-image {
-            position: relative;
-            display: block;
-            margin: 8px 0;
-            border-radius: 4px;
-            object-fit: contain;
-          }
-
           [contenteditable]:empty:before {
             content: attr(data-placeholder);
             color: var(--text-placeholder);
             pointer-events: none;
           }
 
-          [contenteditable] img.notepad-image:hover {
-            outline: 2px solid rgba(255, 255, 255, 0.5);
-            outline-offset: 2px;
+          [contenteditable] a.notepad-image-link {
+            color: inherit;
+            text-decoration: underline;
+            cursor: pointer;
+          }
+
+          [contenteditable] a.notepad-image-link:hover {
+            opacity: 0.8;
           }
 
           /* Scrollbar styling */

@@ -30,7 +30,12 @@ Your reactive personal dashboard. Built with Next.js, TypeScript, and Tailwind C
     - 6-hour hourly forecast
     - Location-based (requires geolocation permission)
   - **Todo List**: Add, complete, remove, and drag-and-drop reorder todos with persistent storage
-  - **Notepad**: Text notes with auto-save to localStorage
+  - **Notepad**: Multi-tab text editor with auto-save to localStorage
+    - Create multiple notepad tabs (up to 20)
+    - Drag-and-drop tab reordering
+    - Image support: Paste or upload images to create clickable links (e.g., `[Image #1]`) that open in a new tab
+    - Images are not stored in localStorage (only link references), preventing quota issues
+    - Per-tab image numbering that automatically renumbers when images are added or removed
   - **System Info**: Browser info, screen size, storage usage, and session uptime
 - **Settings & Customization**:
   - Wallpaper upload and management
@@ -135,7 +140,9 @@ See `.cursorrules` for detailed documentation on the widget system architecture.
 All data is stored in browser localStorage and persists across sessions:
 - **Widget Configuration**: Widget positions and assignments (`hyperdash-widget-config`)
 - **Todos**: Task list items and completion status
-- **Notes**: Notepad content with auto-save
+- **Notes**: Notepad content with auto-save (including multiple tabs)
+  - Note: Image links in notepad use blob URLs that are session-only (not persisted)
+  - Images can be re-added after page reload if needed
 - **Wallpaper**: Custom uploaded wallpaper images (base64 encoded)
 - **Color Settings**: Reactive color palette calculated from wallpaper
 - **Preferences**: Clock format (12h/24h) and other settings

@@ -210,6 +210,37 @@ e.dataTransfer.setDragImage(canvas, 0, 0);
 
 **Pattern**: Drag handle (grid dots SVG) left of action buttons. Use `cursor-grab`, `active:cursor-grabbing`. Enhanced border/shadow on dragged item. `transition-all duration-200`.
 
+### ContentEditable with Links
+
+**Image Links in Notepad**: When adding clickable links to contentEditable elements:
+
+**Link Creation**:
+- Create `<a>` elements with blob URLs for images
+- Links should behave like normal text (deletable, selectable)
+- Use `window.open()` in click handlers to open links in new tabs
+- Check for text selection before preventing default (allow normal editing)
+
+**Renumbering Pattern**:
+- Track link count with refs to avoid unnecessary renumbering
+- Only renumber when link count changes, not on every input
+- Use `requestAnimationFrame` and preserve/restore selection during renumbering
+- Prevent infinite loops by checking if renumbering is already in progress
+
+**Example**:
+```tsx
+const isRenumberingRef = useRef(false);
+const previousLinkCountRef = useRef(0);
+
+const handleInput = () => {
+  if (isRenumberingRef.current) return;
+  // ... save content ...
+  const links = editorRef.current.querySelectorAll('a.image-link');
+  if (links.length !== previousLinkCountRef.current) {
+    requestAnimationFrame(() => renumberImageLinks(true));
+  }
+};
+```
+
 ## File Structure
 
 ```
