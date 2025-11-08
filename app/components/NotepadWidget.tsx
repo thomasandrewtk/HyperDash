@@ -584,7 +584,63 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
     }
   };
 
-  // Insert a URL link similar to image links
+  // Insert timestamp at cursor position
+  const insertTimestamp = useCallback(() => {
+    if (!editorRef.current) return;
+    
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    let hours = now.getHours();
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // 0 should be 12
+    const hoursStr = String(hours).padStart(2, '0');
+    
+    const timestamp = ` ~ ${month}/${day} ${hoursStr}:${minutes} ${ampm} ~ `;
+    
+    // Insert at cursor position
+    const selection = window.getSelection();
+    let insertRange: Range | null = null;
+    
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      // Check if the range is within the editor
+      if (editorRef.current.contains(range.commonAncestorContainer)) {
+        insertRange = range;
+      }
+    }
+    
+    if (insertRange && selection) {
+      // Insert at cursor position within editor
+      insertRange.deleteContents();
+      const textNode = document.createTextNode(timestamp);
+      insertRange.insertNode(textNode);
+      insertRange.setStartAfter(textNode);
+      insertRange.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(insertRange);
+    } else {
+      // Insert at the end of editor content
+      const range = document.createRange();
+      range.selectNodeContents(editorRef.current);
+      range.collapse(false); // Collapse to end
+      const textNode = document.createTextNode(timestamp);
+      range.insertNode(textNode);
+      
+      // Set cursor after the timestamp
+      range.setStartAfter(textNode);
+      range.collapse(true);
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+    
+    handleInput();
+  }, [handleInput]);
+
   const insertURLLink = (urlString: string) => {
     if (!editorRef.current) return;
     
@@ -913,6 +969,15 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
           e.stopImmediatePropagation();
           handleAddImage();
           break;
+        case 's':
+          // Only handle Ctrl+S when editing in the contentEditable editor
+          if (activeElement && activeElement === editorRef.current && editorRef.current?.isContentEditable) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            insertTimestamp();
+          }
+          break;
         default:
           // Check for Ctrl+1-9
           const numKey = parseInt(e.key);
@@ -932,7 +997,7 @@ export default function NotepadWidget({ isFocused }: { isFocused?: boolean }) {
     return () => {
       document.removeEventListener('keydown', handleKeyDown, { capture: true } as EventListenerOptions);
     };
-  }, [isFocused, handleNewTab, handleCloseTab, handleRenameTab, handleAddImage, cycleTabForward, cycleTabBackward, switchToTabByNumber]);
+  }, [isFocused, handleNewTab, handleCloseTab, handleRenameTab, handleAddImage, cycleTabForward, cycleTabBackward, switchToTabByNumber, insertTimestamp]);
 
   useWidgetKeyboardShortcuts(isFocused ?? false, shortcuts);
 
