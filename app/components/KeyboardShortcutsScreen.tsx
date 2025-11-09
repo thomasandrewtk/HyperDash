@@ -123,14 +123,14 @@ function KeyboardShortcutsContent({ onClose, fromOnboarding = false }: KeyboardS
       {/* Content with centered widget */}
       <div className="relative z-10 h-screen flex items-center justify-center p-4">
         <div 
-          className={`w-full max-w-3xl transition-opacity duration-300 ${
+          className={`w-full max-w-3xl h-[85vh] max-h-[85vh] transition-opacity duration-300 ${
             widgetMounted ? 'animate-widget-entrance' : 'opacity-0 translate-y-4'
           }`}
         >
-          <Widget className="max-h-[85vh] overflow-y-auto">
-            <div className="flex flex-col gap-6">
+          <Widget className="h-full max-h-full">
+            <div className="flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto pr-1">
               {/* Header */}
-              <div className="text-center border-b border-white/10 pb-4">
+              <div className="text-center border-b border-white/10 pb-4 flex-shrink-0">
                 <h1 
                   className="text-2xl md:text-3xl font-semibold mb-2"
                   style={{ color: colors.secondary }}
@@ -149,7 +149,7 @@ function KeyboardShortcutsContent({ onClose, fromOnboarding = false }: KeyboardS
               </div>
 
               {/* Shortcuts Groups */}
-              <div className="space-y-6">
+              <div className="space-y-6 flex-1">
                 {shortcutGroups.map((group, groupIndex) => (
                   <div key={groupIndex} className="space-y-3">
                     <h2 
@@ -184,7 +184,7 @@ function KeyboardShortcutsContent({ onClose, fromOnboarding = false }: KeyboardS
               </div>
 
               {/* Close/Continue Button */}
-              <div className="flex justify-end pt-4 border-t border-white/10">
+              <div className="flex justify-end pt-4 border-t border-white/10 flex-shrink-0">
                 <button
                   onClick={onClose}
                   className="
