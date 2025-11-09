@@ -232,7 +232,8 @@ function OnboardingContent({ onComplete }: OnboardingScreenProps) {
                 </div>
               </div>
 
-              {/* Continue button */}
+              {/* Continue button with keyboard tip */}
+              <div className="flex items-center justify-center gap-3">
               <button
                 onClick={handleContinue}
                 disabled={!selectedWallpaper}
@@ -247,6 +248,15 @@ function OnboardingContent({ onComplete }: OnboardingScreenProps) {
               >
                 Continue
               </button>
+                {selectedWallpaper && (
+                  <span 
+                    className="text-xs font-mono"
+                    style={{ color: colors.primary }}
+                  >
+                    press <strong style={{ color: colors.secondary }}>Enter</strong> ⏎
+                  </span>
+                )}
+              </div>
             </div>
           </Widget>
         </div>

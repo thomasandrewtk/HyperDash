@@ -128,7 +128,10 @@ function KeyboardShortcutsContent({ onClose, fromOnboarding = false }: KeyboardS
           }`}
         >
           <Widget className="h-full max-h-full">
-            <div className="flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto pr-1">
+            <div className="flex flex-col flex-1 min-h-0">
+              {/* Scrollable Content Area */}
+              <div className="flex-1 overflow-y-auto min-h-0 pr-1">
+                <div className="flex flex-col gap-6">
               {/* Header */}
               <div className="text-center border-b border-white/10 pb-4 flex-shrink-0">
                 <h1 
@@ -137,19 +140,10 @@ function KeyboardShortcutsContent({ onClose, fromOnboarding = false }: KeyboardS
                 >
                   Keyboard Shortcuts
                 </h1>
-                <p 
-                  className="text-sm"
-                  style={{ color: colors.primary }}
-                >
-                  {fromOnboarding 
-                    ? <>Press <kbd className="px-2 py-1 bg-white/10 border border-white/20 rounded text-xs font-mono" style={{ color: colors.button }}>Enter</kbd> to continue</>
-                    : <>Press <kbd className="px-2 py-1 bg-white/10 border border-white/20 rounded text-xs font-mono" style={{ color: colors.button }}>Escape</kbd> to close</>
-                  }
-                </p>
               </div>
 
               {/* Shortcuts Groups */}
-              <div className="space-y-6 flex-1">
+                  <div className="space-y-6">
                 {shortcutGroups.map((group, groupIndex) => (
                   <div key={groupIndex} className="space-y-3">
                     <h2 
@@ -181,10 +175,12 @@ function KeyboardShortcutsContent({ onClose, fromOnboarding = false }: KeyboardS
                     </div>
                   </div>
                 ))}
+                  </div>
+                </div>
               </div>
 
-              {/* Close/Continue Button */}
-              <div className="flex justify-end pt-4 border-t border-white/10 flex-shrink-0">
+              {/* Fixed Button at Bottom */}
+              <div className="flex justify-center items-center gap-3 pt-4 border-t border-white/10 flex-shrink-0">
                 <button
                   onClick={onClose}
                   className="
@@ -207,6 +203,21 @@ function KeyboardShortcutsContent({ onClose, fromOnboarding = false }: KeyboardS
                 >
                   {fromOnboarding ? 'Continue' : 'Close'}
                 </button>
+                {fromOnboarding ? (
+                  <span 
+                    className="text-xs font-mono"
+                    style={{ color: colors.primary }}
+                  >
+                    press <strong style={{ color: colors.secondary }}>Enter</strong> ⏎
+                  </span>
+                ) : (
+                  <span 
+                    className="text-xs font-mono"
+                    style={{ color: colors.primary }}
+                  >
+                    press <strong style={{ color: colors.secondary }}>Esc</strong> ←
+                  </span>
+                )}
               </div>
             </div>
           </Widget>

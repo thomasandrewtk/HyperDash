@@ -64,6 +64,10 @@ export function useKeyboardShortcuts() {
       const editableElement =
         activeElement instanceof HTMLElement ? activeElement : null;
 
+      // Check if settings modal is open
+      const settingsModal = document.querySelector('[data-settings-modal="true"]');
+      const isSettingsOpen = settingsModal !== null;
+
       const cycleFocus = (direction: 'forward' | 'backward') => {
         e.preventDefault();
         e.stopPropagation();
@@ -81,21 +85,31 @@ export function useKeyboardShortcuts() {
       };
 
       // Handle focus navigation shortcuts
-      // These always work - pressing a key gives keyboard control
-      // Tab - Cycle forward through widgets
-      if (e.key === 'Tab' && !e.shiftKey) {
-        cycleFocus('forward');
-        return;
-      }
-
-      // Shift + Tab - Cycle backward through widgets
-      if (e.key === 'Tab' && e.shiftKey) {
-        cycleFocus('backward');
-        return;
+      // Skip Tab navigation if settings modal is open (let settings handle it)
+      if (e.key === 'Tab') {
+        if (isSettingsOpen) {
+          // Let settings modal handle Tab navigation
+          return;
+        }
+        // Tab - Cycle forward through widgets
+        if (!e.shiftKey) {
+          cycleFocus('forward');
+          return;
+        }
+        // Shift + Tab - Cycle backward through widgets
+        if (e.shiftKey) {
+          cycleFocus('backward');
+          return;
+        }
       }
 
       // Ignore other shortcuts if user is editing text
       if (editingText) {
+        return;
+      }
+
+      // Skip widget focus shortcuts if settings modal is open
+      if (isSettingsOpen) {
         return;
       }
 

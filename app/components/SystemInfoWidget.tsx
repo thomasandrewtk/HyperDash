@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Widget from './Widget';
-import KeyboardShortcutsScreen from './KeyboardShortcutsScreen';
 import { getFromLocalStorage, saveToLocalStorage, removeFromLocalStorage } from '@/app/lib/utils';
 import { useReactiveColors } from './ColorContext';
 import { useUploadThing } from '@/app/lib/uploadthing';
@@ -19,7 +18,7 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [startTime] = useState(Date.now());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<'appearance' | 'data' | 'shortcuts'>('appearance');
   const [wallpaperPreview, setWallpaperPreview] = useState<string | null>(null);
   const [clockFormat, setClockFormat] = useState<'12h' | '24h'>(() => {
     const saved = getFromLocalStorage('clockFormat');
@@ -99,6 +98,116 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
       setWallpaperPreview(savedWallpaper);
     }
   }, []);
+
+  // Reset category to appearance when settings open
+  useEffect(() => {
+    if (isSettingsOpen) {
+      setSelectedCategory('appearance');
+    }
+  }, [isSettingsOpen]);
+
+  // Handle Tab/Shift+Tab to cycle through settings tabs
+  useEffect(() => {
+    if (!isSettingsOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if user is editing text
+      const activeElement = document.activeElement;
+      const isEditing = activeElement instanceof HTMLInputElement ||
+                       activeElement instanceof HTMLTextAreaElement ||
+                       (activeElement instanceof HTMLElement && activeElement.contentEditable === 'true');
+      
+      if (isEditing) {
+        return; // Let normal text editing work
+      }
+
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const tabs: Array<'appearance' | 'data' | 'shortcuts'> = ['appearance', 'data', 'shortcuts'];
+        const currentIndex = tabs.indexOf(selectedCategory);
+        
+        if (e.shiftKey) {
+          // Shift+Tab - cycle backward
+          const prevIndex = currentIndex === 0 ? tabs.length - 1 : currentIndex - 1;
+          setSelectedCategory(tabs[prevIndex]);
+        } else {
+          // Tab - cycle forward
+          const nextIndex = (currentIndex + 1) % tabs.length;
+          setSelectedCategory(tabs[nextIndex]);
+        }
+      }
+    };
+
+    // Use capture phase to catch Tab before other handlers
+    document.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('keydown', handleKeyDown, true);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, true);
+      window.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [isSettingsOpen, selectedCategory]);
+
+  // Keyboard shortcuts data
+  const shortcutGroups = [
+    {
+      title: 'Global Shortcuts',
+      shortcuts: [
+        { key: '1-9', description: 'Focus widget by position' },
+        { key: 'Tab', description: 'Cycle forward through widgets' },
+        { key: 'Shift + Tab', description: 'Cycle backward through widgets' },
+        { key: 'S', description: 'Open Settings' },
+        { key: 'Shift + W', description: 'Upload wallpaper' },
+        { key: 'Shift + C', description: 'Toggle clock format' },
+        { key: 'Shift + E', description: 'Export data' },
+        { key: 'Shift + I', description: 'Import data' },
+        { key: 'Escape', description: 'Close modals/dialogs' },
+      ],
+    },
+    {
+      title: 'Settings',
+      shortcuts: [
+        { key: 'Tab', description: 'Cycle forward through settings tabs' },
+        { key: 'Shift + Tab', description: 'Cycle backward through settings tabs' },
+        { key: 'Escape', description: 'Close Settings' },
+      ],
+    },
+    {
+      title: 'Clock Widget',
+      shortcuts: [
+        { key: 'Space', description: 'Start/Pause Pomodoro timer' },
+        { key: 'R', description: 'Reset Pomodoro timer' },
+        { key: 'K', description: 'Skip Pomodoro session' },
+      ],
+    },
+    {
+      title: 'Todo Widget',
+      shortcuts: [
+        { key: 'N', description: 'Focus new todo input' },
+        { key: 'C', description: 'Toggle show/hide completed todos' },
+        { key: 'X', description: 'Clear all completed todos' },
+        { key: '↑ / ↓', description: 'Navigate todos' },
+        { key: 'Enter', description: 'Edit selected todo (or focus input)' },
+        { key: 'Space', description: 'Toggle completion of selected todo' },
+        { key: 'Backspace', description: 'Delete selected todo' },
+        { key: 'Escape', description: 'Clear selection / Close dialogs' },
+      ],
+    },
+    {
+      title: 'Notepad Widget',
+      shortcuts: [
+        { key: 'Enter', description: 'Focus editor' },
+        { key: 'Ctrl + T', description: 'New tab' },
+        { key: 'Ctrl + W', description: 'Close tab' },
+        { key: 'Ctrl + R', description: 'Rename tab' },
+        { key: 'Ctrl + I', description: 'Add image' },
+        { key: 'Ctrl + Alt + ← / →', description: 'Cycle tabs' },
+        { key: 'Ctrl + 1-9', description: 'Switch to tab by number' },
+      ],
+    },
+  ];
 
   // Listen for keyboard shortcut events
   useEffect(() => {
@@ -348,14 +457,17 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
           
           {/* Modal */}
           <div 
+            data-settings-modal="true"
             className="
               relative z-10
               bg-black/40 backdrop-blur-xl
               border border-white/20
               rounded-sm
-              p-6
-              max-w-md w-full
+              p-4
+              max-w-2xl w-full
+              h-[600px]
               shadow-lg
+              flex flex-col
             "
             style={{
               color: colors.primary,
@@ -363,43 +475,111 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
             }}
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Header */}
+            <div className="flex justify-between items-center mb-4 border-b border-white/10 pb-2 flex-shrink-0">
             <h2 
-              className="text-xl font-semibold mb-4 border-b border-white/10 pb-2 font-mono"
+                className="text-xl font-semibold font-mono"
               style={{ color: colors.secondary }}
             >
               Settings
             </h2>
-            
-            {/* About Section */}
-            <div className="space-y-3 mb-6">
-              <h3 
-                className="text-sm font-semibold font-mono"
-                style={{ color: colors.secondary }}
+              <button
+                onClick={() => setIsSettingsOpen(false)}
+                className="
+                  px-3 py-1.5
+                  bg-white/10
+                  border border-white/30
+                  rounded-sm
+                  hover:bg-white/15
+                  hover:border-white/50
+                  transition-all duration-200
+                  font-mono
+                  text-xs
+                  active:scale-95
+                "
+                style={{
+                  color: colors.button,
+                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+                }}
               >
-                About
-              </h3>
-              <div className="flex flex-col items-center space-y-3">
-                <img
-                  src="/hyperdash-logo-transparent.png"
-                  alt="HyperDash Logo"
-                  className="h-16 w-auto"
-                />
-                <div className="text-xs space-y-2 text-center" style={{ color: colors.primary }}>
-                  <p>
-                    <span style={{ color: colors.secondary }}>HyperDash</span>
-                  </p>
-                  <p>
-                    Your reactive personal dashboard.
-                  </p>
-                  <p>
-                    Built with Next.js, TypeScript, and Tailwind CSS.
-                  </p>
-                </div>
-              </div>
+                Close
+              </button>
             </div>
 
-            {/* Clock Format Section */}
-            <div className="space-y-3 mb-6">
+            {/* Sidebar + Content Layout */}
+            <div className="flex flex-1 min-h-0 gap-4">
+              {/* Sidebar Navigation */}
+              <div className="w-44 flex-shrink-0 border-r border-white/10 pr-4">
+                <nav className="flex flex-col gap-1">
+                  <button
+                    onClick={() => setSelectedCategory('appearance')}
+                    className={`
+                      px-3 py-2
+                      text-left
+                      border rounded-sm
+                      transition-all duration-200
+                      font-mono text-xs
+                      ${selectedCategory === 'appearance'
+                        ? 'bg-white/15 border-white/50' 
+                        : 'bg-white/10 border-white/30 hover:bg-white/15 hover:border-white/50'
+                      }
+                    `}
+                    style={{
+                      color: colors.button,
+                      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+                    }}
+                  >
+                    Appearance
+                  </button>
+                  <button
+                    onClick={() => setSelectedCategory('data')}
+                    className={`
+                      px-3 py-2
+                      text-left
+                      border rounded-sm
+                      transition-all duration-200
+                      font-mono text-xs
+                      ${selectedCategory === 'data'
+                        ? 'bg-white/15 border-white/50' 
+                        : 'bg-white/10 border-white/30 hover:bg-white/15 hover:border-white/50'
+                      }
+                    `}
+                    style={{
+                      color: colors.button,
+                      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+                    }}
+                  >
+                    About
+                  </button>
+                  <button
+                    onClick={() => setSelectedCategory('shortcuts')}
+                    className={`
+                      px-3 py-2
+                      text-left
+                      border rounded-sm
+                      transition-all duration-200
+                      font-mono text-xs
+                      ${selectedCategory === 'shortcuts'
+                        ? 'bg-white/15 border-white/50' 
+                        : 'bg-white/10 border-white/30 hover:bg-white/15 hover:border-white/50'
+                      }
+                    `}
+                    style={{
+                      color: colors.button,
+                      boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+                    }}
+                  >
+                    Shortcuts
+                  </button>
+                </nav>
+            </div>
+
+              {/* Content Area */}
+              <div className="flex-1 overflow-y-auto min-h-0">
+                {selectedCategory === 'appearance' && (
+                  <div className="space-y-4">
+                    {/* Clock Format */}
+                    <div className="space-y-2">
               <h3 
                 className="text-sm font-semibold font-mono border-b border-white/10 pb-1"
                 style={{ color: colors.secondary }}
@@ -448,22 +628,17 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
               </div>
             </div>
 
-            {/* Wallpaper Section */}
-            <div className="space-y-3 mb-6">
+                    {/* Wallpaper */}
+                    <div className="space-y-2">
               <h3 
                 className="text-sm font-semibold font-mono border-b border-white/10 pb-1"
                 style={{ color: colors.secondary }}
               >
                 Wallpaper
               </h3>
-              <div className="space-y-3">
                 {/* Preset Wallpapers */}
                 {WALLPAPER_PRESETS.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="text-xs" style={{ color: colors.secondary }}>
-                      Presets:
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-3 gap-2 mb-2">
                       {WALLPAPER_PRESETS.map((preset) => {
                         const isSelected = wallpaperPreview === preset.url;
                         return (
@@ -476,7 +651,7 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
                             }}
                             className={`
                               relative
-                              h-20
+                                  h-16
                               border rounded-sm
                               overflow-hidden
                               transition-all duration-200
@@ -498,24 +673,13 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
                                 </div>
                               </div>
                             )}
-                            <div 
-                              className="absolute bottom-0 left-0 right-0 bg-black/60 px-1 py-0.5 text-xs font-mono truncate"
-                              style={{ color: colors.button }}
-                            >
-                              {preset.name}
-                            </div>
                           </button>
                         );
                       })}
-                    </div>
                   </div>
                 )}
 
-                {/* Custom Upload */}
-                <div>
-                  <div className="text-xs mb-2" style={{ color: colors.secondary }}>
-                    Custom Upload:
-                  </div>
+                      {/* Upload Custom Image - Inline */}
                   <label
                     htmlFor="wallpaper-upload"
                     className={`
@@ -538,14 +702,11 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
                   >
                     {isUploading ? 'Uploading...' : 'Upload Custom Image'}
                   </label>
-                </div>
                 
-                {wallpaperPreview && (
+                      {/* Current wallpaper preview - only show if custom */}
+                      {wallpaperPreview && !isPresetWallpaper(wallpaperPreview) && (
                   <div className="space-y-2">
-                    <div className="text-xs" style={{ color: colors.secondary }}>
-                      Current:
-                    </div>
-                    <div className="relative w-full h-32 border border-white/20 rounded-sm overflow-hidden">
+                          <div className="relative w-full h-24 border border-white/20 rounded-sm overflow-hidden">
                       <img
                         src={wallpaperPreview}
                         alt="Wallpaper preview"
@@ -575,145 +736,141 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
                     </button>
                   </div>
                 )}
+            </div>
+
+            </div>
+                )}
+
+                {selectedCategory === 'data' && (
+                  <div className="space-y-4">
+                    {/* About */}
+                    <div className="space-y-2">
+                      <h3 
+                        className="text-sm font-semibold font-mono border-b border-white/10 pb-1"
+                        style={{ color: colors.secondary }}
+                      >
+                        About
+                      </h3>
+                      <div className="flex flex-col items-center space-y-3">
+                        <img
+                          src="/hyperdash-logo-transparent.png"
+                          alt="HyperDash Logo"
+                          className="h-16 w-auto"
+                        />
+                        <div className="text-sm font-semibold font-mono" style={{ color: colors.secondary }}>
+                          HyperDash
+                        </div>
+                        <p 
+                          className="text-xs text-center max-w-sm"
+                          style={{ color: colors.primary }}
+                        >
+                          Your reactive personal dashboard.<br />
+                          Built with Next.js, TypeScript, and Tailwind CSS.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 pt-4">
+                        <button
+                          onClick={handleExportData}
+                          className="
+                            px-3 py-2
+                            bg-white/10
+                            border border-white/30
+                            rounded-sm
+                            hover:bg-white/15
+                            hover:border-white/50
+                            transition-all duration-200
+                            font-mono text-xs
+                          "
+                          style={{
+                            color: colors.button,
+                            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+                          }}
+                        >
+                          Export
+                        </button>
+                        <button
+                          onClick={handleImportData}
+                          className="
+                            px-3 py-2
+                            bg-white/10
+                            border border-white/30
+                            rounded-sm
+                            hover:bg-white/15
+                            hover:border-white/50
+                            transition-all duration-200
+                            font-mono text-xs
+                          "
+                          style={{
+                            color: colors.button,
+                            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+                          }}
+                        >
+                          Import
+                        </button>
+                      </div>
+                      <button
+                        onClick={handleClearAllData}
+                        className="
+                          w-full px-3 py-2
+                          bg-red-900/20
+                          border border-red-500/30
+                          rounded-sm
+                          hover:bg-red-900/30
+                          hover:border-red-500/50
+                          transition-all duration-200
+                          font-mono text-xs
+                        "
+                        style={{
+                          color: colors.button,
+                          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+                        }}
+                      >
+                        Clear All Data
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {selectedCategory === 'shortcuts' && (
+                  <div className="space-y-4">
+                    {shortcutGroups.map((group, groupIndex) => (
+                      <div key={groupIndex} className="space-y-2">
+                        <h3 
+                          className="text-sm font-semibold font-mono border-b border-white/10 pb-1"
+                          style={{ color: colors.secondary }}
+                        >
+                          {group.title}
+                        </h3>
+                        <div className="space-y-1.5">
+                          {group.shortcuts.map((shortcut, index) => (
+                            <div 
+                              key={index}
+                              className="flex items-start justify-between gap-4 py-1.5 border-b border-white/5 last:border-0"
+                            >
+                              <span 
+                                className="text-xs flex-1"
+                                style={{ color: colors.primary }}
+                              >
+                                {shortcut.description}
+                              </span>
+                              <kbd 
+                                className="px-2 py-1 bg-white/10 border border-white/20 rounded-sm text-xs font-mono whitespace-nowrap flex-shrink-0"
+                                style={{ color: colors.button }}
+                              >
+                                {shortcut.key}
+                              </kbd>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
               </div>
-            </div>
-
-            {/* Keyboard Shortcuts Section */}
-            <div className="space-y-3 mb-6">
-              <h3 
-                className="text-sm font-semibold font-mono border-b border-white/10 pb-1"
-                style={{ color: colors.secondary }}
-              >
-                Keyboard Shortcuts
-              </h3>
-              <button
-                onClick={() => {
-                  setIsSettingsOpen(false);
-                  setIsShortcutsOpen(true);
-                }}
-                className="
-                  w-full px-3 py-2
-                  bg-white/10
-                  border border-white/30
-                  rounded-sm
-                  hover:bg-white/15
-                  hover:border-white/50
-                  transition-all duration-200
-                  font-mono text-xs
-                "
-                style={{
-                  color: colors.button,
-                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
-                }}
-              >
-                View Keyboard Shortcuts
-              </button>
-            </div>
-
-            {/* Data Management Section */}
-            <div className="space-y-3 mb-6">
-              <h3 
-                className="text-sm font-semibold font-mono border-b border-white/10 pb-1"
-                style={{ color: colors.secondary }}
-              >
-                Data Management
-              </h3>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={handleExportData}
-                  className="
-                    px-3 py-2
-                    bg-white/10
-                    border border-white/30
-                    rounded-sm
-                    hover:bg-white/15
-                    hover:border-white/50
-                    transition-all duration-200
-                    font-mono text-xs
-                  "
-                  style={{
-                    color: colors.button,
-                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
-                  }}
-                >
-                  Export
-                </button>
-                <button
-                  onClick={handleImportData}
-                  className="
-                    px-3 py-2
-                    bg-white/10
-                    border border-white/30
-                    rounded-sm
-                    hover:bg-white/15
-                    hover:border-white/50
-                    transition-all duration-200
-                    font-mono text-xs
-                  "
-                  style={{
-                    color: colors.button,
-                    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
-                  }}
-                >
-                  Import
-                </button>
-              </div>
-              <button
-                onClick={handleClearAllData}
-                className="
-                  w-full px-3 py-2
-                  bg-red-900/20
-                  border border-red-500/30
-                  rounded-sm
-                  hover:bg-red-900/30
-                  hover:border-red-500/50
-                  transition-all duration-200
-                  font-mono text-xs
-                "
-                style={{
-                  color: colors.button,
-                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
-                }}
-              >
-                Clear All Data
-              </button>
-            </div>
-
-            {/* Close Button */}
-            <div className="flex justify-end">
-              <button
-                onClick={() => setIsSettingsOpen(false)}
-                className="
-                  px-4 py-2
-                  bg-white/10
-                  border border-white/30
-                  rounded-sm
-                  hover:bg-white/15
-                  hover:border-white/50
-                  hover:shadow-md hover:shadow-white/20
-                  transition-all duration-200
-                  font-mono
-                  text-sm
-                  active:scale-95
-                "
-                style={{
-                  color: colors.button,
-                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
-                }}
-              >
-                Close
-              </button>
             </div>
           </div>
         </div>
-      )}
-
-      {/* Keyboard Shortcuts Screen */}
-      {isShortcutsOpen && (
-        <KeyboardShortcutsScreen 
-          onClose={() => setIsShortcutsOpen(false)}
-          fromOnboarding={false}
-        />
       )}
     </>
   );
