@@ -1,12 +1,14 @@
 {
   "name": "hyperdash",
   "version": "0.1.0",
+  "packageManager": "pnpm@9.12.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "analyze": "ANALYZE=true next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx --cache --cache-location .next/cache/eslint/",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run"
@@ -19,6 +21,7 @@
     "uploadthing": "^7.7.4"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.0.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",

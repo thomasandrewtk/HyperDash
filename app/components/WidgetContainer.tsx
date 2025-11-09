@@ -1,6 +1,7 @@
 'use client';
 
-import React, { Suspense, lazy, useMemo, useEffect, useRef } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { WidgetType } from '@/app/lib/widgetRegistry';
 
 interface WidgetContainerProps {
@@ -13,12 +14,30 @@ interface WidgetContainerProps {
 
 // Create lazy-loaded components for each widget type
 // These are created at module level for proper code splitting
-const lazyWidgets: Record<WidgetType, React.LazyExoticComponent<React.ComponentType<any>>> = {
-  clock: lazy(() => import('../components/ClockWidget')),
-  weather: lazy(() => import('../components/WeatherWidget')),
-  system: lazy(() => import('../components/SystemInfoWidget')),
-  todo: lazy(() => import('../components/TodoWidget')),
-  notepad: lazy(() => import('../components/NotepadWidget')),
+const WidgetLoading = () => (
+  <div className="h-full flex items-center justify-center">
+    <div className="text-sm opacity-50">Loading...</div>
+  </div>
+);
+
+const lazyWidgets: Record<WidgetType, React.ComponentType<any>> = {
+  clock: dynamic(() => import('../components/ClockWidget'), {
+    loading: WidgetLoading,
+  }),
+  weather: dynamic(() => import('../components/WeatherWidget'), {
+    loading: WidgetLoading,
+  }),
+  system: dynamic(() => import('../components/SystemInfoWidget'), {
+    loading: WidgetLoading,
+  }),
+  todo: dynamic(() => import('../components/TodoWidget'), {
+    ssr: false,
+    loading: WidgetLoading,
+  }),
+  notepad: dynamic(() => import('../components/NotepadWidget'), {
+    ssr: false,
+    loading: WidgetLoading,
+  }),
 };
 
 /**
@@ -110,15 +129,7 @@ export default function WidgetContainer({
       className="h-full min-h-0"
       onMouseDown={handleMouseDown}
     >
-      <Suspense
-        fallback={
-          <div className="h-full flex items-center justify-center">
-            <div className="text-sm opacity-50">Loading...</div>
-          </div>
-        }
-      >
-        <LazyWidget {...widgetProps} isFocused={isFocused} />
-      </Suspense>
+      <LazyWidget {...widgetProps} isFocused={isFocused} />
     </div>
   );
 }

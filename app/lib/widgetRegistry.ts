@@ -27,8 +27,8 @@ const widgetComponents: Record<
 export async function loadWidget(
   type: WidgetType
 ): Promise<React.ComponentType<WidgetComponentProps>> {
-  const module = await widgetComponents[type]();
-  return module.default;
+  const widgetModule = await widgetComponents[type]();
+  return widgetModule.default;
 }
 
 /**
