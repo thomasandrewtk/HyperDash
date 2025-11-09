@@ -8,7 +8,7 @@ const f = createUploadthing();
  */
 export const ourFileRouter = {
   // Wallpaper uploader endpoint
-  wallpaperUploader: f({ image: { maxFileSize: "10MB", maxFileCount: 1 } })
+  wallpaperUploader: f({ image: { maxFileSize: "16MB", maxFileCount: 1 } })
     .onUploadComplete(async ({ metadata, file }) => {
       // File uploaded successfully
       console.log("Wallpaper uploaded:", file.url);
