@@ -108,6 +108,48 @@ body {
   }
 }
 
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes widget-entrance {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes button-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes wallpaper-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* Loading screen animations - combined pulse and gradient shift */
 @keyframes logo-animation {
   0% {
@@ -158,6 +200,22 @@ body {
   
   .glow {
     animation: glow 2s ease-in-out infinite;
+  }
+  
+  .animate-fade-in {
+    animation: fade-in 0.4s ease-out;
+  }
+  
+  .animate-widget-entrance {
+    animation: widget-entrance 0.6s ease-out;
+  }
+  
+  .animate-button-pulse {
+    animation: button-pulse 2s ease-in-out infinite;
+  }
+  
+  .animate-wallpaper-fade-in {
+    animation: wallpaper-fade-in 0.8s ease-out;
   }
 }
 
