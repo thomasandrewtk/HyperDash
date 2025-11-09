@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Widget from './Widget';
+import KeyboardShortcutsScreen from './KeyboardShortcutsScreen';
 import { getFromLocalStorage, saveToLocalStorage, removeFromLocalStorage } from '@/app/lib/utils';
 import { useReactiveColors } from './ColorContext';
 import { useUploadThing } from '@/app/lib/uploadthing';
@@ -18,6 +19,7 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [startTime] = useState(Date.now());
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const [wallpaperPreview, setWallpaperPreview] = useState<string | null>(null);
   const [clockFormat, setClockFormat] = useState<'12h' | '24h'>(() => {
     const saved = getFromLocalStorage('clockFormat');
@@ -576,6 +578,38 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
               </div>
             </div>
 
+            {/* Keyboard Shortcuts Section */}
+            <div className="space-y-3 mb-6">
+              <h3 
+                className="text-sm font-semibold font-mono border-b border-white/10 pb-1"
+                style={{ color: colors.secondary }}
+              >
+                Keyboard Shortcuts
+              </h3>
+              <button
+                onClick={() => {
+                  setIsSettingsOpen(false);
+                  setIsShortcutsOpen(true);
+                }}
+                className="
+                  w-full px-3 py-2
+                  bg-white/10
+                  border border-white/30
+                  rounded-sm
+                  hover:bg-white/15
+                  hover:border-white/50
+                  transition-all duration-200
+                  font-mono text-xs
+                "
+                style={{
+                  color: colors.button,
+                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+                }}
+              >
+                View Keyboard Shortcuts
+              </button>
+            </div>
+
             {/* Data Management Section */}
             <div className="space-y-3 mb-6">
               <h3 
@@ -672,6 +706,14 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
             </div>
           </div>
         </div>
+      )}
+
+      {/* Keyboard Shortcuts Screen */}
+      {isShortcutsOpen && (
+        <KeyboardShortcutsScreen 
+          onClose={() => setIsShortcutsOpen(false)}
+          fromOnboarding={false}
+        />
       )}
     </>
   );
