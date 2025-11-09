@@ -12,9 +12,11 @@
     "test:run": "vitest run"
   },
   "dependencies": {
+    "@uploadthing/react": "^7.3.3",
     "next": "^15.0.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "uploadthing": "^7.7.4"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",

@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import Widget from './Widget';
 import { getFromLocalStorage, saveToLocalStorage, removeFromLocalStorage } from '@/app/lib/utils';
 import { useReactiveColors } from './ColorContext';
+import { useUploadThing } from '@/app/lib/uploadthing';
+import { WALLPAPER_PRESETS, isPresetWallpaper } from '@/app/lib/wallpaperConfig';
 
 interface SystemInfo {
   browser: string;
@@ -23,6 +25,7 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
   });
   const { colors } = useReactiveColors();
   const wallpaperInputRef = useRef<HTMLInputElement>(null);
+  const { startUpload, isUploading } = useUploadThing("wallpaperUploader");
 
   useEffect(() => {
     const updateInfo = () => {
@@ -110,7 +113,7 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
     };
 
     const handleOpenWallpaperUpload = () => {
-      if (wallpaperInputRef.current) {
+      if (wallpaperInputRef.current && !isUploading) {
         wallpaperInputRef.current.click();
       }
     };
@@ -146,9 +149,9 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
       window.removeEventListener('exportData', handleExportDataEvent);
       window.removeEventListener('importData', handleImportDataEvent);
     };
-  }, [clockFormat]);
+  }, [clockFormat, isUploading]);
 
-  const handleWallpaperUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleWallpaperUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -164,20 +167,26 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        setWallpaperPreview(dataUrl);
-        saveToLocalStorage('wallpaper', dataUrl);
+    // Reset input value to allow re-uploading the same file
+    if (e.target) {
+      e.target.value = '';
+    }
+
+    try {
+      // Upload to UploadThing
+      const uploadedFiles = await startUpload([file]);
+      
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        const fileUrl = uploadedFiles[0].url;
+        setWallpaperPreview(fileUrl);
+        saveToLocalStorage('wallpaper', fileUrl);
         // Trigger custom event to update dashboard
-        window.dispatchEvent(new CustomEvent('wallpaperChanged', { detail: dataUrl }));
+        window.dispatchEvent(new CustomEvent('wallpaperChanged', { detail: fileUrl }));
       }
-    };
-    reader.onerror = () => {
-      alert('Error reading image file');
-    };
-    reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Error uploading wallpaper:', error);
+      alert('Error uploading image. Please try again.');
+    }
   };
 
   const handleResetWallpaper = () => {
@@ -446,36 +455,93 @@ export default function SystemInfoWidget({ isFocused }: { isFocused?: boolean })
                 Wallpaper
               </h3>
               <div className="space-y-3">
+                {/* Preset Wallpapers */}
+                {WALLPAPER_PRESETS.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs" style={{ color: colors.secondary }}>
+                      Presets:
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {WALLPAPER_PRESETS.map((preset) => {
+                        const isSelected = wallpaperPreview === preset.url;
+                        return (
+                          <button
+                            key={preset.id}
+                            onClick={() => {
+                              setWallpaperPreview(preset.url);
+                              saveToLocalStorage('wallpaper', preset.url);
+                              window.dispatchEvent(new CustomEvent('wallpaperChanged', { detail: preset.url }));
+                            }}
+                            className={`
+                              relative
+                              h-20
+                              border rounded-sm
+                              overflow-hidden
+                              transition-all duration-200
+                              ${isSelected 
+                                ? 'border-white/50 ring-2 ring-white/30' 
+                                : 'border-white/20 hover:border-white/40'
+                              }
+                            `}
+                          >
+                            <img
+                              src={preset.url}
+                              alt={preset.name}
+                              className="w-full h-full object-cover"
+                            />
+                            {isSelected && (
+                              <div className="absolute inset-0 bg-white/10 flex items-center justify-center">
+                                <div className="text-xs font-mono" style={{ color: colors.button }}>
+                                  ✓
+                                </div>
+                              </div>
+                            )}
+                            <div 
+                              className="absolute bottom-0 left-0 right-0 bg-black/60 px-1 py-0.5 text-xs font-mono truncate"
+                              style={{ color: colors.button }}
+                            >
+                              {preset.name}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Custom Upload */}
                 <div>
+                  <div className="text-xs mb-2" style={{ color: colors.secondary }}>
+                    Custom Upload:
+                  </div>
                   <label
                     htmlFor="wallpaper-upload"
-                    className="
+                    className={`
                       block
                       px-3 py-2
-                      bg-white/10
-                      border border-white/30
-                      rounded-sm
-                      hover:bg-white/15
-                      hover:border-white/50
-                      cursor-pointer
+                      border rounded-sm
                       transition-all duration-200
                       font-mono
                       text-xs
                       text-center
-                    "
+                      ${isUploading 
+                        ? 'bg-white/5 border-white/20 cursor-not-allowed opacity-50' 
+                        : 'bg-white/10 border-white/30 hover:bg-white/15 hover:border-white/50 cursor-pointer'
+                      }
+                    `}
                     style={{
                       color: colors.button,
                       boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
                     }}
                   >
-                    Upload Image
+                    {isUploading ? 'Uploading...' : 'Upload Custom Image'}
                   </label>
                 </div>
                 
                 {wallpaperPreview && (
                   <div className="space-y-2">
                     <div className="text-xs" style={{ color: colors.secondary }}>
-                      Preview:
+                      Current:
                     </div>
                     <div className="relative w-full h-32 border border-white/20 rounded-sm overflow-hidden">
                       <img
